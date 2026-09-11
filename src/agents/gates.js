@@ -43,8 +43,11 @@
     if (sizing && sizing.qty > 0) {
       impact = AOS.simulate.impact(snapshot, features, { portfolio, risk }, { coin: opp.coin, side: opp.side, qty: sizing.qty, pWin: opp.pWin, horizonDays: opp.horizonDays }, { invalidation: opp.invalidation, target: opp.target }, settings);
     }
-    // 2. PORTFOLIO
-    if (impact) {
+    // 2. PORTFOLIO (includes "is the risk budget large enough for a useful trade?")
+    const minUseful = Math.max(0.0025 * (equity || 0), 5);
+    if (impact && sizing && sizing.riskUsd < minUseful) {
+      g("PORTFOLIO", false, `Budget de risque ${fmt.usd(sizing.riskUsd)} < ${fmt.usd(minUseful)} (0,25 % de l'equity) : le niveau de risque actuel ne laisse pas de place à un nouveau trade utile`);
+    } else if (impact) {
       const dStress = impact.deltas.stressLoss, dConc = impact.portfolioAfter.maxShare;
       const stressOk = !isNum(dStress) || dStress >= -0.02 * (equity || 1) || (impact.riskAfter.combined && !impact.riskAfter.combined.liquidated && impact.deltas.netExposure * (opp.side === "LONG" ? 1 : -1) < 0);
       const concOk = !isNum(dConc) || dConc <= (R.maxConcentration || 0.6) || dConc <= (portfolio?.maxShare || 0) + 1e-9;
@@ -71,9 +74,10 @@
       const ok = (!isNum(worst) || worst >= (R.minLiqDistance || 0.15)) && (!isNum(br) || br >= (R.minBufferRatio || 0.25)) && impact.marginOk;
       g("LIQUIDATION", ok, `Pire distance liq après ${fmt.pct(worst, 0)} (min ${fmt.pct(R.minLiqDistance || 0.15, 0)}) · buffer après ${fmt.pct(br, 0)} (min ${fmt.pct(R.minBufferRatio || 0.25, 0)}) · marge dispo ${impact.marginOk ? "OK" : "INSUFFISANTE"}`);
     } else g("LIQUIDATION", false, "Non calculable");
-    // 7. SENTINEL VETO
-    const vetoed = !!risk?.veto || review?.redTeam?.verdict === "REJECT";
-    g("SENTINEL", !vetoed, risk?.veto ? risk.vetoReason : review?.redTeam?.verdict === "REJECT" ? `Red team : ${review.redTeam.findings[0]?.text}` : review?.redTeam?.verdict === "CAUTION" ? `Red team : prudence (${review.redTeam.findings.filter((f) => f.severity > 0).length} objections)` : "Aucune objection bloquante");
+    // 7. SENTINEL VETO — at STRESSED only risk-reducing trades pass (worse stress loss or higher gross = refused)
+    const reduceOnly = risk?.level === "STRESSED" && impact && (impact.deltas.stressLoss < 0 || impact.deltas.grossExposure > 0) && !(impact.deltas.stressLoss >= 0 && impact.deltas.grossExposure <= 0);
+    const vetoed = !!risk?.veto || review?.redTeam?.verdict === "REJECT" || !!reduceOnly;
+    g("SENTINEL", !vetoed, risk?.veto ? risk.vetoReason : reduceOnly ? "Niveau TENDU : réduction seulement. Ce trade augmente l'exposition brute ou la perte au choc." : review?.redTeam?.verdict === "REJECT" ? `Équipe rouge : ${review.redTeam.findings[0]?.text}` : review?.redTeam?.verdict === "CAUTION" ? `Équipe rouge : prudence (${review.redTeam.findings.filter((f) => f.severity > 0).length} objections)` : "Aucune objection bloquante");
     const pass = gates.every((x) => x.pass);
     const failed = gates.filter((x) => !x.pass).map((x) => x.name);
     return { gates, pass, failed, impact, status: vetoed ? "VETO" : pass ? "APPROVED" : "REJECTED" };

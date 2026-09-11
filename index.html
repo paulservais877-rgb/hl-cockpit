@@ -5,100 +5,103 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="color-scheme" content="dark" />
   <meta name="theme-color" content="#05060a" />
-  <title>Alpha OS · Hyperliquid Terminal</title>
+  <title>Alpha OS · Terminal Hyperliquid</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="assets/css/app.css" />
-  <!-- fonts are loaded without blocking scripts: a slow or blocked font CDN must never delay live data -->
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'" />
-  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" /></noscript>
+  <!-- polices chargées sans bloquer les scripts : un CDN lent ne doit jamais retarder les données en direct -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" /></noscript>
 </head>
 <body>
 <canvas id="stars" aria-hidden="true"></canvas>
 <div class="wrap">
   <header class="topbar">
-    <div class="brand"><b>ALPHA OS</b><span>Hyperliquid terminal · v2</span></div>
-    <div id="sync" class="sync" data-s="IDLE"><span class="dot"></span><b>IDLE</b></div>
-    <button id="btn-sync" class="iconbtn" title="Synchroniser maintenant">⟳ Sync</button>
-    <button id="btn-privacy" class="iconbtn" aria-pressed="false" title="Masquer les montants">◐ Privacy</button>
+    <div class="brand"><b>ALPHA OS</b><span>terminal Hyperliquid</span></div>
+    <div id="sync" class="sync" data-s="IDLE"><span class="dot"></span><b>EN ATTENTE</b></div>
+    <button id="btn-sync" class="iconbtn" title="Synchroniser maintenant">⟳</button>
+    <button id="btn-privacy" class="iconbtn" aria-pressed="false" title="Masquer les montants">◐</button>
     <button id="btn-settings" class="iconbtn" title="Réglages">⚙</button>
   </header>
   <div id="banners"></div>
   <div id="sync-detail" class="legend num" style="gap:14px;margin:4px 0 6px"></div>
   <nav class="nav" aria-label="Sections">
-    <a href="#cmd">Command</a><a href="#alerts">Watch</a><a href="#positions">Positions</a><a href="#sentinel">Sentinel</a><a href="#market">Market</a><a href="#council">Council</a><a href="#decisions">Decisions</a><a href="#simulator">Simulate</a><a href="#scenario">Scenario</a><a href="#cone">Cone</a><a href="#archive">Archive</a><a href="#settings">Settings</a>
+    <a href="#cmd">Tableau de bord</a><a href="#orbit">Orbites</a><a href="#alerts">Veille</a><a href="#positions">Positions</a><a href="#sentinel">Sentinelle</a><a href="#market">Marché</a><a href="#council">Conseil</a><a href="#decisions">Décisions</a><a href="#simulator">Simuler</a><a href="#scenario">Et si…</a><a href="#cone">Cône</a><a href="#archive">Archive</a><a href="#settings">Réglages</a>
   </nav>
 
-  <section id="cmd" class="deck">
-    <div class="deck-head"><span class="eyebrow">Command center</span><h2>En 5 secondes</h2><span class="sub">combien · gain/perte · danger · marché · opportunité · action</span></div>
-    <div id="cmd-tiles" class="grid c5"><div class="card"><div class="empty">En attente de synchronisation…</div></div></div>
-  </section>
+  <details id="cmd" class="deck" open>
+    <summary><span class="chev">›</span><span class="ttl"><span class="eyebrow">Tableau de bord</span><h2>En 5 secondes</h2></span><span class="sum" id="sum-cmd"></span></summary>
+    <div class="body"><div id="cmd-tiles" class="grid c5"><div class="card"><div class="empty">En attente de synchronisation…</div></div></div></div>
+  </details>
 
-  <section id="orbit" class="deck">
-    <div class="deck-head"><span class="eyebrow">Orbital map</span><h2>Quelle position peut tuer le portefeuille ?</h2><span class="sub">taille = exposition · proximité du centre = proximité de liquidation · halo = gravité · luminosité = conviction · oscillation = volatilité</span></div>
-    <div class="card" style="padding:8px"><canvas id="orbit-canvas" class="orbit" width="800" height="380" aria-label="Carte orbitale des positions"></canvas>
-      <div class="legend"><span><i style="background:var(--long)"></i>Long</span><span><i style="background:var(--short)"></i>Short</span><span><i style="background:transparent;border:1px solid var(--ok)"></i>anneau vert = PnL positif</span><span><i style="background:transparent;border:1px dashed var(--bad)"></i>anneaux = zones liq 5 / 15 / 25%</span><span>Tap sur un corps → détails</span></div>
+  <details id="orbit" class="deck" open>
+    <summary><span class="chev">›</span><span class="ttl"><span class="eyebrow">Carte orbitale</span><h2>Quelle position peut tuer le portefeuille ?</h2></span><span class="sum" id="sum-orbit"></span></summary>
+    <div class="body"><div class="card" style="padding:8px"><canvas id="orbit-canvas" class="orbit" width="800" height="380" aria-label="Carte orbitale des positions"></canvas>
+      <div class="legend"><span><i style="background:var(--long)"></i>Long</span><span><i style="background:var(--short)"></i>Short</span><span>taille = exposition</span><span>près du centre = près de la liquidation</span><span>halo = poids dans le risque</span><span>éclat = conviction</span><span>Touche un corps pour le détail</span></div>
+    </div></div>
+  </details>
+
+  <details id="alerts" class="deck">
+    <summary><span class="chev">›</span><span class="ttl"><span class="eyebrow">Veille</span><h2>Ce qui a changé et qui compte</h2></span><span class="sum" id="sum-alerts"></span></summary>
+    <div class="body"><div id="alerts-body" class="grid"></div></div>
+  </details>
+
+  <details id="positions" class="deck" open>
+    <summary><span class="chev">›</span><span class="ttl"><span class="eyebrow">Positions · en direct</span><h2>Si je ne l'avais pas, l'ouvrirais-je aujourd'hui ?</h2></span><span class="sum" id="sum-positions"></span></summary>
+    <div class="body">
+      <div id="poslist" class="poslist"><div class="empty">—</div></div>
+      <div id="posdetail" style="margin-top:12px" hidden></div>
+      <div id="orders" style="margin-top:12px" hidden></div>
+      <span id="hist-progress" class="hint num"></span>
     </div>
-  </section>
+  </details>
 
-  <section id="alerts" class="deck">
-    <div class="deck-head"><span class="eyebrow">Watch</span><h2>Ce qui a changé et qui compte</h2><span class="sub">what changed · why it matters · action / no action</span></div>
-    <div id="alerts-body" class="grid"></div>
-  </section>
+  <details id="sentinel" class="deck">
+    <summary><span class="chev">›</span><span class="ttl"><span class="eyebrow">Sentinelle · veto absolu</span><h2>Jusqu'où le marché peut-il aller contre moi ?</h2></span><span class="sum" id="sum-sentinel"></span></summary>
+    <div class="body" id="sentinel-body"></div>
+  </details>
 
-  <section id="positions" class="deck">
-    <div class="deck-head"><span class="eyebrow">Positions · live</span><h2>Opportunity cost : si je n'avais pas cette position, l'ouvrirais-je aujourd'hui ?</h2><span id="hist-progress" class="sub num"></span></div>
-    <div id="poslist" class="poslist"><div class="empty">—</div></div>
-    <div id="posdetail" style="margin-top:12px" hidden></div>
-    <div id="orders" style="margin-top:12px" hidden></div>
-  </section>
+  <details id="market" class="deck">
+    <summary><span class="chev">›</span><span class="ttl"><span class="eyebrow">Oracle & Flux</span><h2>Ce que le marché est en train de faire</h2></span><span class="sum" id="sum-market"></span></summary>
+    <div class="body" id="market-body"></div>
+  </details>
 
-  <section id="sentinel" class="deck">
-    <div class="deck-head"><span class="eyebrow">Seat 05 · Sentinel</span><h2>Jusqu'où le marché peut-il aller contre moi ?</h2><span class="sub">veto absolu · stress simultanés · survival map · gravité</span></div>
-    <div id="sentinel-body"></div>
-  </section>
+  <details id="council" class="deck">
+    <summary><span class="chev">›</span><span class="ttl"><span class="eyebrow">Le conseil des six</span><h2>Qui pense quoi, et qui a raison</h2></span><span class="sum" id="sum-council"></span></summary>
+    <div class="body" id="council-body"></div>
+  </details>
 
-  <section id="market" class="deck">
-    <div class="deck-head"><span class="eyebrow">Seat 01 · Oracle & Seat 02 · Flow</span><h2>Ce que le marché est en train de faire</h2><span class="sub">régime · température · funding · OI · anomalies · rotation</span></div>
-    <div id="market-body"></div>
-  </section>
+  <details id="decisions" class="deck" open>
+    <summary><span class="chev">›</span><span class="ttl"><span class="eyebrow">Décisions</span><h2>Après le contrôle de risque</h2></span><span class="sum" id="sum-decisions"></span></summary>
+    <div class="body"><div id="decisions-body" class="grid"></div></div>
+  </details>
 
-  <section id="council" class="deck">
-    <div class="deck-head"><span class="eyebrow">Council of six</span><h2>Conviction, désaccord, réputation</h2><span class="sub">ensemble pondéré par la performance mesurée</span></div>
-    <div id="council-body"></div>
-  </section>
+  <details id="simulator" class="deck">
+    <summary><span class="chev">›</span><span class="ttl"><span class="eyebrow">Simulateur</span><h2>Actif · sens · quantité. C'est tout.</h2></span><span class="sum" id="sum-simulator"></span></summary>
+    <div class="body"><div class="card"><div id="sim-form"></div><div id="sim-result" style="margin-top:12px"></div></div></div>
+  </details>
 
-  <section id="decisions" class="deck">
-    <div class="deck-head"><span class="eyebrow">Decision cards</span><h2>Après le Risk Gate</h2><span class="sub">EDGE → PORTFOLIO → LIQUIDITY → FUNDING → CORRELATION → LIQUIDATION → SENTINEL</span></div>
-    <div id="decisions-body" class="grid"></div>
-  </section>
+  <details id="scenario" class="deck">
+    <summary><span class="chev">›</span><span class="ttl"><span class="eyebrow">Et si…</span><h2>Que devient mon portefeuille si…</h2></span><span class="sum" id="sum-scenario"></span></summary>
+    <div class="body"><div class="card"><div id="scen-body"></div></div></div>
+  </details>
 
-  <section id="simulator" class="deck">
-    <div class="deck-head"><span class="eyebrow">Simulator</span><h2>Asset · direction · quantité. C'est tout.</h2><span class="sub">le moteur suggère invalidation et cible, tu acceptes, édites ou ignores</span></div>
-    <div class="card"><div id="sim-form"></div><div id="sim-result" style="margin-top:12px"></div></div>
-  </section>
+  <details id="cone" class="deck">
+    <summary><span class="chev">›</span><span class="ttl"><span class="eyebrow">Cône de probabilité</span><h2>Une distribution, pas une prévision</h2></span><span class="sum" id="sum-cone"></span></summary>
+    <div class="body" id="cone-body"></div>
+  </details>
 
-  <section id="scenario" class="deck">
-    <div class="deck-head"><span class="eyebrow">Scenario engine</span><h2>Et si…</h2><span class="sub">prix absolus, variations, ou langage naturel</span></div>
-    <div class="card"><div id="scen-body"></div></div>
-  </section>
+  <details id="archive" class="deck">
+    <summary><span class="chev">›</span><span class="ttl"><span class="eyebrow">Archive · mémoire</span><h2>Mon trading crée-t-il de l'alpha ?</h2></span><span class="sum" id="sum-archive"></span></summary>
+    <div class="body" id="archive-body"></div>
+  </details>
 
-  <section id="cone" class="deck">
-    <div class="deck-head"><span class="eyebrow">Probability cone</span><h2>Distribution, pas prévision</h2><span class="sub">1 · 7 · 30 · 90 jours — P10 à P90 · risque de ruine</span></div>
-    <div id="cone-body"></div>
-  </section>
+  <details id="settings" class="deck">
+    <summary><span class="chev">›</span><span class="ttl"><span class="eyebrow">Réglages</span><h2>Source, pare-feu de capital, politique de risque</h2></span><span class="sum" id="sum-settings"></span></summary>
+    <div class="body" id="settings-body"></div>
+  </details>
 
-  <section id="archive" class="deck">
-    <div class="deck-head"><span class="eyebrow">Seat 06 · Archive</span><h2>Mon trading crée-t-il de l'alpha ?</h2><span class="sub">vs BTC · vs ETH · vs mix · vs ne rien faire · avant et après coûts</span></div>
-    <div id="archive-body"></div>
-  </section>
-
-  <section id="settings" class="deck">
-    <div class="deck-head"><span class="eyebrow">Settings</span><h2>Source, firewall de capital, politique de risque</h2></div>
-    <div id="settings-body"></div>
-  </section>
-
-  <footer class="foot"><span id="stamp">—</span><br/>Aucun ordre n'est jamais envoyé depuis cette page. Données : Hyperliquid info API + WebSocket. Calculs locaux. Rien n'est inventé : chaque donnée est LIVE, CALCULATED, HISTORICAL, ESTIMATED ou UNKNOWN.</footer>
+  <footer class="foot"><span id="stamp">—</span><br/>Aucun ordre n'est jamais envoyé depuis cette page. Données : API et WebSocket Hyperliquid, calculs locaux. Rien n'est inventé : chaque donnée est DIRECT, CALCULÉ, HISTORIQUE, ESTIMÉ ou INCONNU.</footer>
 </div>
 
 <script src="src/core/util.js"></script>
@@ -126,6 +129,7 @@
 <script src="src/agents/orchestrator.js"></script>
 <script src="src/engine/alerts.js"></script>
 <script src="src/engine/pipeline.js"></script>
+<script src="src/ui/i18n.js"></script>
 <script src="src/ui/dom.js"></script>
 <script src="src/ui/starfield.js"></script>
 <script src="src/ui/orbital.js"></script>

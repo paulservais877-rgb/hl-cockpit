@@ -63,7 +63,7 @@
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, 34, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = "#e7eaf1"; ctx.font = "600 11px JetBrains Mono, monospace"; ctx.textAlign = "center";
       ctx.fillText(privacy ? "•••••" : fmt.usd(account?.equity), cx, cy + 50);
-      ctx.fillStyle = "#8b93a7"; ctx.font = "500 9px JetBrains Mono, monospace"; ctx.fillText(level, cx, cy + 62);
+      ctx.fillStyle = "#8b93a7"; ctx.font = "500 9px JetBrains Mono, monospace"; ctx.fillText(AOS.i18n ? AOS.i18n.level(level) : level, cx, cy + 62);
       // bodies
       for (const b of bodies) {
         const { x, y } = bodyPos(b, t);

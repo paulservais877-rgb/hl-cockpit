@@ -67,7 +67,9 @@
     const F = stats.sum(fl.map((f) => f.amt));
     const W = stats.sum(fl.map((f) => f.amt * (T1 - f.t) / Math.max(T1 - T0, 1)));
     const denom = v0 + W;
-    return { ret: denom > 0 ? (v1 - v0 - F) / denom : NaN, v0, v1, flows: F, flowCount: fl.length, t0: T0, t1: T1, prov: fl.length ? "CALCULATED" : "ESTIMATED" };
+    // a series that starts near 0 (account funded after the first point) has no meaningful % return: report NaN, the $ PnL is shown instead
+    const degenerate = !(v0 > 0) || v0 < 0.05 * Math.abs(F);
+    return { ret: denom > 0 && !degenerate ? (v1 - v0 - F) / denom : NaN, v0, v1, flows: F, flowCount: fl.length, t0: T0, t1: T1, degenerate, prov: degenerate ? "UNKNOWN" : fl.length ? "CALCULATED" : "ESTIMATED" };
   }
   // backward compatible wrapper (ledger rows → flows)
   const dietzLedger = (accountValue, ledger, t0, t1, kind = "perps") => dietz(accountValue, (ledger || []).map((l) => ({ t: l.t, amt: kind === "perps" ? l.flowPerps : l.flowTotal })), t0, t1);
@@ -128,6 +130,7 @@
       if (series.length < 2) return { key, kind, ret: NaN, prov: "UNKNOWN" };
       const t0 = series[0][0], t1 = series[series.length - 1][0];
       const dz = dietzLedger(series, ledger, t0, t1, kind);
+      if (dz.degenerate) return { key, kind, ret: NaN, prov: "UNKNOWN", days: Math.round((t1 - t0) / D), t0, t1, v0: dz.v0, v1: dz.v1, flows: dz.flows, pnl: pf[key]?.pnl?.length ? pf[key].pnl[pf[key].pnl.length - 1][1] : NaN, note: "compte parti de 0 sur cette fenêtre : rendement % non calculable, voir le PnL en dollars", mdd: maxDrawdown(series) };
       const rB = benchmarkReturn(history?.candles?.BTC?.["1d"], t0, t1), rE = benchmarkReturn(history?.candles?.ETH?.["1d"], t0, t1);
       const feesW = stats.sum(fills.filter((f) => f.t >= t0 && f.t <= t1).map((f) => f.fee || 0));
       const fundW = stats.sum(uf.filter((f) => f.t >= t0 && f.t <= t1).map((f) => f.usdc));

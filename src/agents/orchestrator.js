@@ -77,18 +77,20 @@
     let action;
     const approved = cards.filter((c) => c.status === "APPROVED");
     const reduceV = verdicts.filter((v) => v.verdict === "REDUCE" || v.verdict === "EXIT");
+    const L = { NORMAL: "NORMAL", WATCH: "VIGILANCE", STRESSED: "TENDU", DANGER: "DANGER", CRITICAL: "CRITIQUE" };
+    const VD = { KEEP: "Garder", INCREASE: "Renforcer", REDUCE: "Réduire", EXIT: "Sortir", HEDGE: "Couvrir", "NO EDGE": "Sans avantage" };
     if (risk?.level === "CRITICAL" || risk?.level === "DANGER") {
       const r = risk.reduceFirst?.[0];
-      action = { kind: "RISK", title: `Réduire ${r?.coin || "la position dominante"} maintenant`, text: `Niveau ${risk.level}. ${risk.reasons[0]}`, why: risk.reasons, coin: r?.coin };
+      action = { kind: "RISK", title: `Réduire ${r?.coin || "la position dominante"} maintenant`, text: `Niveau ${L[risk.level] || risk.level}. ${risk.reasons[0]}`, why: risk.reasons, coin: r?.coin };
     } else if (reduceV.length) {
       const v = reduceV[0];
-      action = { kind: "REBALANCE", title: `${v.verdict} ${v.coin} ${v.side}`, text: v.why[0], why: v.why, coin: v.coin };
+      action = { kind: "REBALANCE", title: `${VD[v.verdict] || v.verdict} ${v.coin} ${v.side}`, text: v.why[0], why: v.why, coin: v.coin };
     } else if (approved.length) {
       const c = approved[0];
-      action = { kind: "TRADE", title: `${c.side} ${c.coin} · conviction ${c.conviction}/100`, text: `${c.name} · EV ${c.evR.toFixed(2)}R · RR ${c.rr.toFixed(1)} · risque ${fmt.usd(c.sizing?.riskUsd)}`, why: [c.why, ...c.convictionParts.slice(0, 3).map((p) => `${p.agent}: ${p.reasons[0]}`)], coin: c.coin, cardId: c.id };
+      action = { kind: "TRADE", title: `${c.side} ${c.coin} · conviction ${c.conviction}/100`, text: `${c.name} · espérance ${c.evR.toFixed(2)}R · risque/gain ${c.rr.toFixed(1)} · mise en risque ${fmt.usd(c.sizing?.riskUsd)}`, why: [c.why, ...c.convictionParts.slice(0, 3).map((p) => `${p.agent}: ${p.reasons[0]}`)], coin: c.coin, cardId: c.id };
     } else {
       const rejected = cards.length;
-      action = { kind: "NO_TRADE", title: "NO TRADE — PERFECT DECISION", text: rejected ? `${rejected} setup${rejected > 1 ? "s" : ""} détecté${rejected > 1 ? "s" : ""}, aucun ne passe le Risk Gate (${[...new Set(cards.flatMap((c) => c.gate.failed))].join(", ")})` : "Aucun setup avec un edge suffisant après coûts. Ne rien faire est la meilleure décision.", why: cards.slice(0, 3).map((c) => `${c.coin} ${c.side} ${c.name} rejeté : ${c.gate.failed.join(", ")}`) };
+      action = { kind: "NO_TRADE", title: "Aucun trade — décision parfaite", text: rejected ? `${rejected} configuration${rejected > 1 ? "s" : ""} détectée${rejected > 1 ? "s" : ""}, aucune ne passe le contrôle de risque (${[...new Set(cards.flatMap((c) => c.gate.failed))].join(", ")})` : "Aucune configuration avec un avantage suffisant après coûts. Ne rien faire est la meilleure décision.", why: cards.slice(0, 3).map((c) => `${c.coin} ${c.side} ${c.name} refusé : ${c.gate.failed.join(", ")}`) };
     }
     return { convictions, marketDisagreement: marketDI, effectiveWeights: effWeights, cards, approved, verdicts, action, prov: "CALCULATED" };
   }

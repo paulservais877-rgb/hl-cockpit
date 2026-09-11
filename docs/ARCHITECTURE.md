@@ -170,6 +170,20 @@ Constats et adaptations :
 
 Ce que les chiffres réels disent, sans enrobage : 5 positions cross pour un levier effectif de 5×, net short, 27 $ de marge disponible, 2 000 fills en 19 jours, et un PnL perps cumulé de **−62 678 $** depuis janvier d'après l'API `portfolio`. Le dashboard n'est utile que s'il fait baisser l'activité et le levier, pas s'il les justifie.
 
+### 11 bis. Pipeline complet sur données réelles (CI, 11/09/2026 12:35 UTC)
+
+| Sortie | Valeur réelle | Conséquence |
+|---|---|---|
+| Régime | Ré-accumulation, confiance 86 %, biais haussier, météo 60 (appétit) | le livre est net short (bêta BTC −2,1) contre le régime |
+| Risque | TENDU (levier brut 5,2×), perte BTC −20 % tout corrélé : −48 % de l'equity, choc simultané : −71 % | pas de veto, mais « réduction seulement » |
+| Cône | P(liquidation) 30 j = 17 %, 90 j = 39 % à positions inchangées | c'est le coût de l'inaction |
+| Gravité | HYPE 47 %, ADA 33 % | position à réduire en premier : HYPE |
+| Archive (30 j) | 27 trades clos (+6 tronqués), réussite 59 %, facteur de profit 1,09, espérance +20 $/trade, frais 852 $ + funding −650 $ | **coûts = 20 % de l'equity sur 30 jours** ; capture moyenne du meilleur gain : −3 % |
+| Schémas | longs 22 trades +5 523 $ ; shorts 5 trades −4 991 $ ; « Expansion haussière » 16 trades −5 227 $ | les shorts et les trades en expansion haussière détruisent l'alpha |
+| Décisions avant correctif | 5 cartes « approuvées » à 9 $ de risque chacune | corrigé : budget < 0,25 % de l'equity ⇒ refus ; niveau TENDU ⇒ réduction seulement |
+
+Trois corrections issues de ce run : (1) le contrôle PORTEFEUILLE refuse un trade dont la mise en risque est symbolique ; (2) au niveau TENDU la Sentinelle refuse tout trade qui augmente l'exposition brute ou la perte au choc ; (3) le rendement « depuis le début » n'est plus calculé quand la série de valeur part de 0 (le PnL en dollars est affiché à la place). La volatilité de stress prend désormais le pire des deux cas : tout corrélé (livre directionnel) ou décorrélé (livre long/short dont les couvertures lâchent).
+
 ## TOP 10 HIGHEST-IMPACT IMPROVEMENTS (classés)
 
 | # | Amélioration | Alpha | Risque ↓ | Complexité | Priorité |

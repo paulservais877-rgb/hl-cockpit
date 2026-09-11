@@ -28,10 +28,11 @@
     const st = AOS.sync.computeStatus();
     const age = isNum(S.lastOkTs) ? nowMs() - S.lastOkTs : NaN;
     const el = $("#sync"); el.dataset.s = st;
-    const label = { LIVE: "LIVE", SYNCING: "SYNCING", STALE: "STALE", DEGRADED: "DEGRADED", ERROR: "ERROR", IDLE: "IDLE" }[st] || st;
-    el.innerHTML = `<span class="dot"></span><b>${label}</b><span>${isNum(age) ? "il y a " + fmt.age(age) : "—"}</span>${S.ws && S.ws !== "OFF" ? `<span class="dimc">ws ${esc(S.ws)}</span>` : ""}${S.source === "demo" ? '<span class="tag info">DEMO</span>' : ""}`;
+    const label = AOS.i18n.sync(st);
+    const wsLabel = { CONNECTED: "connecté", CONNECTING: "connexion", LIVE: "direct", RECONNECTING: "reconnexion", ERROR: "erreur", DEMO: "démo" }[S.ws] || S.ws;
+    el.innerHTML = `<span class="dot"></span><b>${label}</b><span>${isNum(age) ? "il y a " + fmt.age(age) : "—"}</span>${S.ws && S.ws !== "OFF" && S.ws !== "DEMO" ? `<span class="dimc">ws ${esc(wsLabel)}</span>` : ""}${S.source === "demo" ? '<span class="tag info">DÉMO</span>' : ""}`;
     const det = $("#sync-detail");
-    if (det) det.innerHTML = `<span>LAST SYNC <b class="num">${esc(fmt.time(S.lastOkTs))}</b></span><span>DATA FRESHNESS <b class="num">${isNum(age) ? esc(fmt.age(age)) : "—"}</b></span><span>API STATUS <b>${esc(st)}</b>${S.latencyMs ? ` <span class="dimc">${Math.round(S.latencyMs)}ms</span>` : ""}</span><span>DEGRADED MODE <b class="${S.partial?.length ? "warnc" : ""}">${S.partial?.length ? "OUI (" + esc(S.partial.join(", ")) + ")" : "NON"}</b></span><span>NEXT <b class="num">${isNum(S.nextTs) ? esc(fmt.age(Math.max(0, S.nextTs - nowMs()))) : "—"}</b></span>${S.errors?.length ? `<span class="neg">${esc(S.errors.slice(-2).join(" · "))}</span>` : ""}${history?.errors?.length ? `<span class="warnc">historique partiel : ${history.errors.length} erreur(s)</span>` : ""}`;
+    if (det) det.innerHTML = `<span>DERNIÈRE SYNCHRO <b class="num">${esc(fmt.time(S.lastOkTs))}</b></span><span>FRAÎCHEUR <b class="num">${isNum(age) ? esc(fmt.age(age)) : "—"}</b></span><span>API <b>${esc(label)}</b>${S.latencyMs ? ` <span class="dimc">${Math.round(S.latencyMs)} ms</span>` : ""}</span><span>MODE DÉGRADÉ <b class="${S.partial?.length ? "warnc" : ""}">${S.partial?.length ? "OUI (" + esc(S.partial.join(", ")) + ")" : "NON"}</b></span><span>PROCHAINE <b class="num">${isNum(S.nextTs) ? esc(fmt.age(Math.max(0, S.nextTs - nowMs()))) : "—"}</b></span>${S.errors?.length ? `<span class="neg">${esc(S.errors.slice(-2).join(" · "))}</span>` : ""}${history?.errors?.length ? `<span class="warnc">historique partiel : ${history.errors.length} erreur(s)</span>` : ""}`;
   }
 
   // ---- history loading ---------------------------------------------------------------
@@ -85,7 +86,8 @@
     V.cone(a);
     V.archive(a);
     orbital?.update(a, { privacy: store.settings.privacy });
-    $("#stamp").textContent = `Analyse ${fmt.time(a.ts)} · ${a.snapshot.positions.length} position(s) · features ${a.timings.features}ms · pipeline ${a.timings.cone}ms`;
+    D.sum("orbit", a.risk.gravity[0] ? `${a.risk.gravity[0].coin} porte ${Math.round(a.risk.gravity[0].share * 100)} % du risque` : "aucune position");
+    $("#stamp").textContent = `Analyse à ${fmt.time(a.ts)} · ${a.snapshot.positions.length} position(s) · calcul complet en ${a.timings.cone} ms`;
   }
 
   // ---- notifications / watcher -------------------------------------------------------------
@@ -111,7 +113,9 @@
   function wire() {
     $("#btn-sync").addEventListener("click", () => AOS.sync.sync("manual"));
     $("#btn-privacy").addEventListener("click", () => { const p = !store.settings.privacy; store.saveSettings({ privacy: p }); applyPrivacy(); });
-    $("#btn-settings").addEventListener("click", () => { $("#settings").scrollIntoView({ behavior: "smooth" }); });
+    $("#btn-settings").addEventListener("click", () => { const d = $("#settings"); d.open = true; d.scrollIntoView({ behavior: "smooth" }); });
+    // ouvrir la section visée par un lien de navigation
+    document.querySelectorAll(".nav a").forEach((a) => a.addEventListener("click", () => { const d = document.querySelector(a.getAttribute("href")); if (d && d.tagName === "DETAILS") d.open = true; }));
     D.on($("#poslist"), "click", ".poscard", (e, t) => { store.state.ui.selected = t.dataset.coin; V.positionDetail(analysis, t.dataset.coin); });
     D.on($("#poslist"), "keydown", ".poscard", (e, t) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); store.state.ui.selected = t.dataset.coin; V.positionDetail(analysis, t.dataset.coin); } });
     D.on($("#posdetail"), "click", "[data-close-detail]", () => { store.state.ui.selected = null; $("#posdetail").hidden = true; });
@@ -121,9 +125,9 @@
       if (!card) return;
       const act = t.dataset.act;
       if (!DEMO) AOS.reputation.recordDecision(card, act);
-      if (act === "EXECUTE") { window.open("https://app.hyperliquid.xyz/trade/" + encodeURIComponent(card.coin), "_blank", "noopener"); banner("info", `Décision EXECUTE enregistrée pour ${card.side} ${card.coin}. L'exécution se fait dans l'interface Hyperliquid (ce dashboard n'envoie jamais d'ordre).`); }
+      if (act === "EXECUTE") { window.open("https://app.hyperliquid.xyz/trade/" + encodeURIComponent(card.coin), "_blank", "noopener"); banner("info", `Décision « exécuter » enregistrée pour ${card.side} ${card.coin}. L'exécution se fait dans l'interface Hyperliquid : cette page n'envoie jamais d'ordre.`); }
       if (act === "SIMULATE") AOS.simUI.prefill(card);
-      if (act === "IGNORE") { t.closest(".card").style.opacity = 0.45; banner("info", `IGNORE enregistré : ${card.side} ${card.coin} sera résolu à l'horizon pour mesurer pertes évitées / gains manqués.`); }
+      if (act === "IGNORE") { t.closest(".card").style.opacity = 0.45; banner("info", `« Ignorer » enregistré : ${card.side} ${card.coin} sera résolu à l'horizon pour mesurer les pertes évitées et les gains manqués.`); }
     });
     // settings
     D.on($("#settings-body"), "click", "#s-save", () => {
@@ -154,7 +158,7 @@
   function boot() {
     AOS.starfield.start($("#stars"));
     orbital = AOS.orbital.create($("#orbit-canvas"), { onSelect: (coin) => { store.state.ui.selected = coin; if (analysis) { V.positionDetail(analysis, coin); } } });
-    if (DEMO) { store.saveSettings({ wallet: AOS.fixtures.wallet }); banner("info", "<b>MODE DÉMO</b> — données synthétiques, aucune connexion à Hyperliquid. Retire <code>?demo=1</code> de l'URL pour ton wallet.", "demo"); }
+    if (DEMO) { store.saveSettings({ wallet: AOS.fixtures.wallet }); banner("info", "<b>MODE DÉMO</b> — données inventées pour l'exemple, aucune connexion à Hyperliquid. Retire <code>?demo=1</code> de l'adresse pour ton wallet.", "demo"); }
     else if (!store.settings.wallet) store.saveSettings({ wallet: DEFAULT_WALLET });
     V.settings();
     wire();

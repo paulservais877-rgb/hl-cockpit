@@ -7,7 +7,7 @@
 
   const PRIORS = { trendPullback: 0.47, breakout: 0.42, failedBreakout: 0.46, meanReversion: 0.52, fundingSqueeze: 0.44 };
   const HORIZON = { trendPullback: 5, breakout: 4, failedBreakout: 3, meanReversion: 2, fundingSqueeze: 3 };
-  const NAMES = { trendPullback: "Trend continuation (pullback)", breakout: "Breakout", failedBreakout: "Failed breakout / liquidity sweep", meanReversion: "Mean reversion", fundingSqueeze: "Funding squeeze" };
+  const NAMES = { trendPullback: "Repli dans la tendance", breakout: "Cassure", failedBreakout: "Fausse cassure / balayage", meanReversion: "Retour à la moyenne", fundingSqueeze: "Squeeze de funding" };
 
   function scan(coin, f, ctx) {
     const out = [];

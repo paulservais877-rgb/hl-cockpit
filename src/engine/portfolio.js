@@ -49,7 +49,9 @@
     const vols = coins.map((c) => features?.byCoin?.[c]?.vol);
     const Cn = covariance(coins, sub(features?.corr?.normal || []), vols);
     const Cs = covariance(coins, sub(features?.corr?.stress || []), vols);
-    const volNormal = portVol(w, Cn), volStress = portVol(w, Cs);
+    // stress = the worse of "everything correlates" (hurts directional books) and "hedges decorrelate" (hurts long/short books)
+    const C0 = covariance(coins, coins.map((_, i) => coins.map((_, j) => (i === j ? 1 : 0))), vols);
+    const volNormal = portVol(w, Cn), volStress = Math.max(portVol(w, Cs), portVol(w, C0));
     const C1 = covariance(coins, coins.map(() => coins.map(() => 1)), vols);
     const volCorr1 = portVol(w, C1);
     const weightedAvgVol = stats.sum(w.map((x, i) => Math.abs(x) * (isNum(vols[i]) ? vols[i] : 0.8)));

@@ -16,7 +16,7 @@
       add("REGIME", 2, `Régime ${p.features.regime.regime} → ${next.features.regime.regime} (${next.features.regime.confidence}%)`, "Les setups valides et le sizing dépendent du régime.", `Relire les verdicts de positions : ${next.orchestration?.verdicts?.filter((v) => v.verdict !== "KEEP").map((v) => v.verdict + " " + v.coin).join(", ") || "aucun changement"}`);
     // risk level transition
     const l0 = p.risk?.level, l1 = next.risk?.level;
-    if (l0 && l1 && l0 !== l1) add("RISK", LEVELS.indexOf(l1) > LEVELS.indexOf(l0) ? 3 : 1, `Risque portefeuille ${l0} → ${l1}`, next.risk.reasons[0], LEVELS.indexOf(l1) >= 2 ? `Réduire ${next.risk.reduceFirst?.[0]?.coin || "la position dominante"}` : "NO ACTION");
+    if (l0 && l1 && l0 !== l1) add("RISK", LEVELS.indexOf(l1) > LEVELS.indexOf(l0) ? 3 : 1, `Risque portefeuille ${l0} → ${l1}`, next.risk.reasons[0], LEVELS.indexOf(l1) >= 2 ? `Réduire ${next.risk.reduceFirst?.[0]?.coin || "la position dominante"}` : "Aucune action");
     // liquidation distance thresholds
     for (const pos of next.snapshot?.positions || []) {
       const before = p.snapshot?.positions?.find((q) => q.coin === pos.coin);
@@ -26,10 +26,10 @@
     }
     // new / closed positions
     const pc = new Set((p.snapshot?.positions || []).map((x) => x.coin)), nc = new Set((next.snapshot?.positions || []).map((x) => x.coin));
-    for (const c of nc) if (p.snapshot && !pc.has(c)) add("POSITION", 1, `Nouvelle position détectée : ${c}`, "Hyperliquid est la source de vérité ; l'analyse inclut maintenant cet actif.", "NO ACTION");
+    for (const c of nc) if (p.snapshot && !pc.has(c)) add("POSITION", 1, `Nouvelle position détectée : ${c}`, "Hyperliquid est la source de vérité ; l'analyse inclut maintenant cet actif.", "Aucune action");
     for (const c of pc) if (!nc.has(c)) add("POSITION", 1, `Position fermée : ${c}`, "Détection automatique via le wallet.", "Journaliser la raison de sortie dans ARCHIVE");
     // funding anomaly
-    for (const a of next.features?.anomalies || []) if (a.type === "FUNDING" && Math.abs(a.z) >= 2.5 && !(p.features?.anomalies || []).some((b) => b.coin === a.coin && b.type === "FUNDING")) add("FUNDING", 2, a.text, "Un funding extrême signale un positionnement surpeuplé : risque de squeeze ou d'érosion.", nc.has(a.coin) ? `Vérifier le coût du funding sur ${a.coin}` : "NO ACTION");
+    for (const a of next.features?.anomalies || []) if (a.type === "FUNDING" && Math.abs(a.z) >= 2.5 && !(p.features?.anomalies || []).some((b) => b.coin === a.coin && b.type === "FUNDING")) add("FUNDING", 2, a.text, "Un funding extrême signale un positionnement surpeuplé : risque de squeeze ou d'érosion.", nc.has(a.coin) ? `Vérifier le coût du funding sur ${a.coin}` : "Aucune action");
     // high conviction setup passing the gate
     for (const c of next.orchestration?.approved || []) if (c.conviction >= 70 && !(p.orchestration?.approved || []).some((d) => d.id === c.id)) add("SETUP", 2, `Setup approuvé : ${c.side} ${c.coin} (${c.conviction}/100, EV ${c.evR.toFixed(2)}R)`, c.why, `Simuler puis décider (risque ${fmt.usd(c.sizing?.riskUsd)})`);
     // major price level: 20d high/low broken on held assets
