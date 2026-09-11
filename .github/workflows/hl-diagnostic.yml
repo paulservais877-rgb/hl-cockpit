@@ -1,0 +1,29 @@
+name: Hyperliquid API diagnostic
+
+on:
+  workflow_dispatch:
+    inputs:
+      wallet:
+        description: "Wallet address (0x…)"
+        required: true
+        default: "0x35f0851EF6516c5706107b86dBe09A62A311ab07"
+      full:
+        description: "Print full JSON responses"
+        required: false
+        default: "false"
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run diagnostic
+        run: node tests/diagnostic.js "${{ github.event.inputs.wallet }}" ${{ github.event.inputs.full == 'true' && '--full' || '' }} | tee diagnostic.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hl-diagnostic
+          path: diagnostic.log
