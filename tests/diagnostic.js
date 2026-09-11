@@ -89,7 +89,7 @@ async function call(label, payload) {
   // ---- full pipeline on live data (history loaded through the same code path as the browser) ----
   if (process.argv.includes("--pipeline") || process.env.HL_PIPELINE === "1") {
     console.log("\n\n===== FULL PIPELINE (live data) =====");
-    for (const f of ["src/data/history.js", "src/engine/features.js", "src/engine/portfolio.js", "src/engine/risk.js", "src/engine/simulate.js", "src/engine/cone.js", "src/engine/alpha.js", "src/agents/oracle.js", "src/agents/flow.js", "src/agents/edge.js", "src/agents/allocator.js", "src/agents/sentinel.js", "src/agents/archive.js", "src/agents/gates.js", "src/agents/reputation.js", "src/agents/orchestrator.js", "src/engine/alerts.js", "src/engine/pipeline.js"]) vm.runInThisContext(fs.readFileSync(path.join(ROOT, f), "utf8"), { filename: f });
+    for (const f of ["src/data/hl-rest.js", "src/data/history.js", "src/engine/features.js", "src/engine/portfolio.js", "src/engine/risk.js", "src/engine/simulate.js", "src/engine/cone.js", "src/engine/alpha.js", "src/agents/oracle.js", "src/agents/flow.js", "src/agents/edge.js", "src/agents/allocator.js", "src/agents/sentinel.js", "src/agents/archive.js", "src/agents/gates.js", "src/agents/reputation.js", "src/agents/orchestrator.js", "src/engine/alerts.js", "src/engine/pipeline.js"]) vm.runInThisContext(fs.readFileSync(path.join(ROOT, f), "utf8"), { filename: f });
     AOS.store.saveSettings({ wallet });
     const t0 = Date.now();
     const history = await AOS.history.loadAll(snap, { wallet, watchlist: AOS.store.settings.watchlist });
