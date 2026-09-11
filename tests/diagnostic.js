@@ -85,4 +85,40 @@ async function call(label, payload) {
   const failed = Object.entries(r).filter(([, v]) => !v.ok).map(([k]) => k);
   console.log("\nFAILED endpoints:", failed.length ? failed.join(", ") : "none");
   if (!r.state.ok) process.exit(1);
+
+  // ---- full pipeline on live data (history loaded through the same code path as the browser) ----
+  if (process.argv.includes("--pipeline") || process.env.HL_PIPELINE === "1") {
+    console.log("\n\n===== FULL PIPELINE (live data) =====");
+    for (const f of ["src/data/history.js", "src/engine/features.js", "src/engine/portfolio.js", "src/engine/risk.js", "src/engine/simulate.js", "src/engine/cone.js", "src/engine/alpha.js", "src/agents/oracle.js", "src/agents/flow.js", "src/agents/edge.js", "src/agents/allocator.js", "src/agents/sentinel.js", "src/agents/archive.js", "src/agents/gates.js", "src/agents/reputation.js", "src/agents/orchestrator.js", "src/engine/alerts.js", "src/engine/pipeline.js"]) vm.runInThisContext(fs.readFileSync(path.join(ROOT, f), "utf8"), { filename: f });
+    AOS.store.saveSettings({ wallet });
+    const t0 = Date.now();
+    const history = await AOS.history.loadAll(snap, { wallet, watchlist: AOS.store.settings.watchlist });
+    console.log(`history loaded in ${Date.now() - t0}ms · candles ${Object.keys(history.candles).join(",")} · fills ${history.fills?.length} · funding rows ${history.userFunding?.length} · ledger ${history.ledger?.length} · errors: ${history.errors.length ? history.errors.join(" | ") : "none"}`);
+    const a = AOS.pipeline.run(snap, history, AOS.store.settings, null, { persist: false });
+    const f2 = (x, d = 2) => (isNum(x) ? +x.toFixed(d) : null);
+    console.log("timings", JSON.stringify(a.timings));
+    console.log("REGIME", a.features.regime.regime, a.features.regime.confidence + "%", a.features.regime.bias, "· temperature", a.features.temperature.value, a.features.temperature.label, "· breadth", f2(a.features.breadth));
+    console.log("PORTFOLIO", JSON.stringify({ gross: f2(a.portfolio.gross, 0), net: f2(a.portfolio.net, 0), grossLev: f2(a.portfolio.grossLev), betaBTC: f2(a.portfolio.betaBTC), volNormal: f2(a.portfolio.volNormal), volStress: f2(a.portfolio.volStress), effBets: f2(a.portfolio.effectiveBets), falseHedges: a.portfolio.falseHedges.length }));
+    console.log("RISK", a.risk.level, JSON.stringify(a.risk.levels), "veto", a.risk.veto, "· btc20 loss", f2(a.risk.btc20LossPct, 3), "· combined loss", f2(a.risk.combinedLossPct, 3), "liquidated", a.risk.combined?.liquidated, "· reduceFirst", a.risk.reduceFirst[0]?.coin, "· fundingPerDay", f2(a.risk.fundingPerDay));
+    for (const p of a.snapshot.positions) console.log(`  ${p.coin} ${p.side} liq=${f2(p.liq, 4)} dist=${f2(p.liqDist, 3)} ${p.noLiqAlone ? "(∞ alone)" : ""} prov=${p.prov.liq}`);
+    console.log("SURVIVAL beta", a.risk.survival.beta.map((b) => `${b.label}:${f2(b.btcPx, 0)}(${f2(b.move, 2)})`).join(" "));
+    console.log("SURVIVAL stress", a.risk.survival.stress.map((b) => `${b.label}:${f2(b.btcPx, 0)}(${f2(b.move, 2)})`).join(" "));
+    console.log("GRAVITY", a.risk.gravity.map((g) => `${g.coin}:${Math.round(g.share * 100)}%`).join(" "));
+    console.log("CONE", a.cone.ok ? a.cone.horizons.map((h) => `${h.horizon}d p10=${f2(h.p10, 0)} p50=${f2(h.p50, 0)} p90=${f2(h.p90, 0)} pLiq=${f2(h.pLiq, 3)}`).join(" | ") : a.cone.reason);
+    for (const n of ["ORACLE", "FLOW", "EDGE", "ALLOCATOR", "SENTINEL", "ARCHIVE"]) console.log(`AGENT ${n}: ${a.agents[n].direction} conf=${f2(a.agents[n].confidence)} → ${a.agents[n].recommendation} · ${(a.agents[n].signals[0] || "").slice(0, 140)}`);
+    console.log("EDGE opportunities", a.agents.EDGE.opportunities.map((o) => `${o.coin} ${o.side} ${o.type} EV=${f2(o.evR)} p=${f2(o.pWin)} rr=${f2(o.rr, 1)}`).join(" | ") || "none", "· rejected", a.agents.EDGE.rejected.length);
+    console.log("CONVICTIONS", Object.values(a.orchestration.convictions).map((c) => `${c.coin}:${c.long}/DI${f2(c.disagreement)}`).join(" "));
+    console.log("CARDS", a.orchestration.cards.map((c) => `${c.coin} ${c.side} ${c.status} conv=${c.conviction} failed=[${c.gate.failed.join(",")}] qty=${f2(c.sizing?.qty, 4)} risk$=${f2(c.sizing?.riskUsd, 0)}`).join(" | ") || "none");
+    console.log("VERDICTS", a.orchestration.verdicts.map((v) => `${v.coin} ${v.side}: ${v.verdict} (${v.why[0]})`).join(" | "));
+    console.log("ACTION", a.orchestration.action.kind, "—", a.orchestration.action.title, "—", a.orchestration.action.text);
+    const al = a.alpha;
+    console.log("ARCHIVE", JSON.stringify({ fills: al.fillsCount, spanDays: f2(al.activity.spanDays, 1), closed: al.closed.length, complete: al.complete.length, truncated: al.truncatedCount, winRate: f2(al.stats.winRate), expectancy: f2(al.stats.expectancy), profitFactor: f2(al.stats.profitFactor), fundingNet90d: f2(al.fundingNet), fees: f2(al.leakage.fees90d), perpsAllTimePnl: f2(al.perpsAllTimePnl, 0), capital: { total: f2(al.capital.totalHL, 0), perps: f2(al.capital.perps, 0), other: f2(al.capital.other, 0), deposits: f2(al.capital.deposits, 0), withdrawals: f2(al.capital.withdrawals, 0) } }));
+    for (const k of ["week", "month", "allTime", "totalMonth", "totalAllTime"]) { const w = al.windows[k]; console.log(`  window ${k} (${w.key}): ret=${f2(w.ret, 4)} btc=${f2(w.btc, 4)} eth=${f2(w.eth, 4)} alphaBTC=${f2(w.alphaBTC, 4)} costPct=${f2(w.costPct, 4)} mdd=${f2(w.mdd?.mdd, 3)} sharpe=${f2(w.sharpe)} flows=${f2(w.flows, 0)} prov=${w.prov}`); }
+    console.log("PATTERNS", al.patterns.join(" | ") || "none (n<5)");
+    console.log("ANOMALIES", a.features.anomalies.map((x) => x.text).join(" | ") || "none");
+    console.log("ALERTS", a.alerts.length);
+    const nanScan = (obj, pathStr = "", out = [], depth = 0) => { if (depth > 4 || !obj || typeof obj !== "object") return out; for (const [k, v] of Object.entries(obj)) { if (typeof v === "number" && Number.isNaN(v)) out.push(pathStr + k); else if (v && typeof v === "object" && !Array.isArray(v)) nanScan(v, pathStr + k + ".", out, depth + 1); } return out; };
+    const nans = nanScan({ portfolio: a.portfolio, risk: { level: a.risk.level, fundingPerDay: a.risk.fundingPerDay, budget: a.risk.budget }, regime: a.features.regime, temperature: a.features.temperature });
+    console.log("NaN fields (expected UNKNOWN only):", nans.length ? nans.join(", ") : "none");
+  }
 })();

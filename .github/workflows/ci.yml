@@ -16,4 +16,4 @@ jobs:
       # Live API diagnostic against the default wallet (public on-chain data). Never fails the build.
       - name: Hyperliquid API diagnostic
         continue-on-error: true
-        run: node tests/diagnostic.js 0x35f0851EF6516c5706107b86dBe09A62A311ab07 --full
+        run: node tests/diagnostic.js 0x35f0851EF6516c5706107b86dBe09A62A311ab07 --pipeline
