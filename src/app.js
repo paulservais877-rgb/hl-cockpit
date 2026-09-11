@@ -37,7 +37,7 @@
   // ---- history loading ---------------------------------------------------------------
   async function ensureHistory(snapshot) {
     if (DEMO) {
-      if (!history) { const fx = AOS.fixtures, N = AOS.normalize; history = { candles: fx.history.candles, funding: fx.history.funding, l2: fx.history.l2, fills: N.parseFills(fx.fills), userFunding: N.parseUserFunding(fx.userFunding), portfolio: N.parsePortfolio(fx.portfolio), ledger: N.parseLedger(fx.ledger), errors: [], loadedTs: nowMs() }; }
+      if (!history) { const fx = AOS.fixtures, N = AOS.normalize; history = { candles: fx.history.candles, funding: fx.history.funding, l2: fx.history.l2, fills: N.parseFills(fx.fills), userFunding: N.parseUserFunding(fx.userFunding), portfolio: N.parsePortfolio(fx.portfolio), ledger: N.parseLedger(fx.ledger), spot: N.parseSpot(fx.spotClearinghouseState), errors: [], loadedTs: nowMs() }; }
       return history;
     }
     const coins = (snapshot.positions || []).map((p) => p.coin).sort().join(",");

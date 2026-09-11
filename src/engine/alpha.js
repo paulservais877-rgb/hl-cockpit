@@ -1,19 +1,28 @@
 /* Personal Alpha OS — ARCHIVE engine: trade reconstruction from fills, performance statistics, funding & fee leakage,
-   alpha vs BTC / ETH / mix / nothing (modified Dietz on account value with ledger flows), PnL attribution,
-   regime-tagged trades, counterfactuals. Everything is HISTORICAL/CALCULATED; approximations are labelled ESTIMATED. */
+   alpha vs BTC / ETH / mix / nothing (modified Dietz on account value with signed ledger flows), PnL attribution,
+   regime-tagged trades, counterfactuals. Everything is HISTORICAL/CALCULATED; approximations are labelled ESTIMATED.
+   Validated on live data: fills are capped (2000 per page) and may start mid-position (startPosition ≠ 0);
+   the `portfolio` endpoint exposes perps-only series (perpDay/perpWeek/perpMonth/perpAllTime) next to whole-account series. */
 (function (root) {
   "use strict";
   const AOS = (root.AOS = root.AOS || {});
   const { isNum, stats, D, H, clamp, uncertainty } = AOS.util;
 
-  /** Reconstruct round-trip trades from fills (position goes 0 → x → 0). */
+  /** Reconstruct round-trip trades from fills (position goes 0 → x → 0). Trades that started before the fill window are flagged `truncated`. */
   function reconstructTrades(fills) {
     const byCoin = {};
     const trades = [];
+    const newTrade = (f, side, extra = {}) => ({ coin: f.coin, side, openTs: f.t, fills: [], realized: 0, fees: 0, maxSize: 0, entryNotional: 0, entryQty: 0, exitNotional: 0, exitQty: 0, truncated: false, ...extra });
     for (const f of fills || []) {
       const signed = (f.side === "BUY" ? 1 : -1) * f.sz;
-      const st = (byCoin[f.coin] = byCoin[f.coin] || { pos: 0, cur: null });
-      if (!st.cur || st.pos === 0) st.cur = { coin: f.coin, side: signed > 0 ? "LONG" : "SHORT", openTs: f.t, fills: [], realized: 0, fees: 0, maxSize: 0, entryNotional: 0, entryQty: 0, exitNotional: 0, exitQty: 0 };
+      let st = byCoin[f.coin];
+      if (!st) {
+        // first fill seen for this coin: the position before it is given by startPosition
+        const sp = isNum(f.startPosition) ? f.startPosition : 0;
+        st = byCoin[f.coin] = { pos: sp, cur: null };
+        if (Math.abs(sp) > 1e-9) { st.cur = newTrade(f, sp > 0 ? "LONG" : "SHORT", { truncated: true, maxSize: Math.abs(sp) }); st.cur.openTs = NaN; }
+      }
+      if (!st.cur || Math.abs(st.pos) < 1e-9) st.cur = newTrade(f, signed > 0 ? "LONG" : "SHORT");
       const t = st.cur;
       const opening = Math.sign(signed) === (t.side === "LONG" ? 1 : -1);
       t.fills.push(f);
@@ -22,14 +31,16 @@
       if (opening) { t.entryNotional += f.sz * f.px; t.entryQty += f.sz; } else { t.exitNotional += f.sz * f.px; t.exitQty += f.sz; }
       st.pos += signed;
       t.maxSize = Math.max(t.maxSize, Math.abs(st.pos));
-      if (Math.abs(st.pos) < 1e-9) { t.closeTs = f.t; t.durationMs = f.t - t.openTs; t.avgEntry = t.entryQty ? t.entryNotional / t.entryQty : NaN; t.avgExit = t.exitQty ? t.exitNotional / t.exitQty : NaN; t.net = t.realized - t.fees; t.status = "CLOSED"; trades.push(t); st.cur = null; st.pos = 0; }
+      const close = () => { t.closeTs = f.t; t.durationMs = isNum(t.openTs) ? f.t - t.openTs : NaN; t.avgEntry = t.entryQty ? t.entryNotional / t.entryQty : NaN; t.avgExit = t.exitQty ? t.exitNotional / t.exitQty : NaN; t.net = t.realized - t.fees; t.status = "CLOSED"; trades.push(t); };
+      if (Math.abs(st.pos) < 1e-9) { close(); st.cur = null; st.pos = 0; }
       else if (Math.sign(st.pos) !== (t.side === "LONG" ? 1 : -1)) { // flipped: close current, open opposite with the remainder
-        t.closeTs = f.t; t.durationMs = f.t - t.openTs; t.avgEntry = t.entryQty ? t.entryNotional / t.entryQty : NaN; t.avgExit = t.exitQty ? t.exitNotional / t.exitQty : NaN; t.net = t.realized - t.fees; t.status = "CLOSED"; trades.push(t);
-        st.cur = { coin: f.coin, side: st.pos > 0 ? "LONG" : "SHORT", openTs: f.t, fills: [f], realized: 0, fees: 0, maxSize: Math.abs(st.pos), entryNotional: Math.abs(st.pos) * f.px, entryQty: Math.abs(st.pos), exitNotional: 0, exitQty: 0 };
+        close();
+        st.cur = newTrade(f, st.pos > 0 ? "LONG" : "SHORT", { maxSize: Math.abs(st.pos), entryNotional: Math.abs(st.pos) * f.px, entryQty: Math.abs(st.pos) });
+        st.cur.fills.push(f);
       }
     }
-    const open = Object.values(byCoin).filter((s) => s.cur && Math.abs(s.pos) > 1e-9).map((s) => ({ ...s.cur, status: "OPEN", avgEntry: s.cur.entryQty ? s.cur.entryNotional / s.cur.entryQty : NaN, durationMs: Date.now() - s.cur.openTs }));
-    return { closed: trades, open };
+    const open = Object.values(byCoin).filter((s) => s.cur && Math.abs(s.pos) > 1e-9).map((s) => ({ ...s.cur, status: "OPEN", avgEntry: s.cur.entryQty ? s.cur.entryNotional / s.cur.entryQty : NaN, durationMs: isNum(s.cur.openTs) ? Date.now() - s.cur.openTs : NaN }));
+    return { closed: trades, open, complete: trades.filter((t) => !t.truncated), truncatedCount: trades.filter((t) => t.truncated).length };
   }
 
   function tradeStats(closed) {
@@ -46,18 +57,20 @@
     };
   }
 
-  /** Modified Dietz return between two timestamps using account value history and ledger flows. */
-  function dietz(accountValue, ledger, t0, t1) {
+  /** Modified Dietz return between two timestamps using an account-value series and signed flows [{t, amt}]. */
+  function dietz(accountValue, flows, t0, t1) {
     const av = accountValue.filter((p) => p[0] >= t0 - D && p[0] <= t1 + D);
     if (av.length < 2) return { ret: NaN, prov: "UNKNOWN" };
     const v0 = av[0][1], v1 = av[av.length - 1][1];
     const T0 = av[0][0], T1 = av[av.length - 1][0];
-    const flows = (ledger || []).filter((l) => l.t > T0 && l.t <= T1 && /deposit|withdraw|transfer/i.test(l.type)).map((l) => ({ t: l.t, amt: /withdraw/i.test(l.type) ? -Math.abs(l.usdc) : Math.abs(l.usdc) }));
-    const F = stats.sum(flows.map((f) => f.amt));
-    const W = stats.sum(flows.map((f) => f.amt * (T1 - f.t) / Math.max(T1 - T0, 1)));
+    const fl = (flows || []).filter((f) => f.t > T0 && f.t <= T1 && isNum(f.amt) && f.amt !== 0);
+    const F = stats.sum(fl.map((f) => f.amt));
+    const W = stats.sum(fl.map((f) => f.amt * (T1 - f.t) / Math.max(T1 - T0, 1)));
     const denom = v0 + W;
-    return { ret: denom > 0 ? (v1 - v0 - F) / denom : NaN, v0, v1, flows: F, t0: T0, t1: T1, prov: flows.length ? "CALCULATED" : "ESTIMATED" };
+    return { ret: denom > 0 ? (v1 - v0 - F) / denom : NaN, v0, v1, flows: F, flowCount: fl.length, t0: T0, t1: T1, prov: fl.length ? "CALCULATED" : "ESTIMATED" };
   }
+  // backward compatible wrapper (ledger rows → flows)
+  const dietzLedger = (accountValue, ledger, t0, t1, kind = "perps") => dietz(accountValue, (ledger || []).map((l) => ({ t: l.t, amt: kind === "perps" ? l.flowPerps : l.flowTotal })), t0, t1);
 
   function benchmarkReturn(candles1d, t0, t1) {
     if (!candles1d?.length) return NaN;
@@ -79,17 +92,23 @@
     const m = stats.mean(rets), s = stats.stdev(rets);
     const downs = rets.filter((x) => x < 0);
     const ds = downs.length ? Math.sqrt(stats.sum(downs.map((x) => x * x)) / rets.length) : NaN;
-    return { sharpe: s > 0 ? (m / s) * Math.sqrt(365) : NaN, sortino: ds > 0 ? (m / ds) * Math.sqrt(365) : NaN, n: rets.length };
+    // points are irregular (≈ 1/day for month, more for week); annualise by observed spacing
+    const spanDays = (accountValue[accountValue.length - 1][0] - accountValue[0][0]) / D;
+    const perYear = spanDays > 0 ? (rets.length / spanDays) * 365 : 365;
+    return { sharpe: s > 0 ? (m / s) * Math.sqrt(perYear) : NaN, sortino: ds > 0 ? (m / ds) * Math.sqrt(perYear) : NaN, n: rets.length };
   }
 
   /** Full ARCHIVE computation. */
   function compute(snapshot, history, features) {
     const fills = history?.fills || [];
-    const { closed, open } = reconstructTrades(fills);
+    const rec = reconstructTrades(fills);
+    const { closed, open } = rec;
+    const complete = rec.complete;
     // regime tag at trade open (BTC daily candles up to that time)
     const btc1d = history?.candles?.BTC?.["1d"] || [];
     const regimeCache = {};
     for (const t of closed) {
+      if (!isNum(t.openTs)) { t.regime = "UNKNOWN"; continue; }
       const day = Math.floor(t.openTs / D);
       if (!regimeCache[day]) {
         const slice = btc1d.filter((k) => k.t <= t.openTs);
@@ -97,32 +116,43 @@
       }
       t.regime = regimeCache[day];
     }
-    const st = tradeStats(closed);
+    const st = tradeStats(complete);
     const uf = history?.userFunding || [];
     const fundingPaid = -stats.sum(uf.filter((r) => r.usdc < 0).map((r) => r.usdc)), fundingReceived = stats.sum(uf.filter((r) => r.usdc > 0).map((r) => r.usdc));
     const fundingByCoin = Object.entries(AOS.util.groupBy(uf, (r) => r.coin)).map(([coin, arr]) => ({ coin, net: stats.sum(arr.map((r) => r.usdc)) })).sort((a, b) => a.net - b.net);
     const pf = history?.portfolio || {};
     const ledger = history?.ledger || [];
     const windows = {};
-    for (const [key, days] of [["week", 7], ["month", 30], ["allTime", NaN]]) {
+    const windowFor = (key, days, kind) => {
       const series = pf[key]?.accountValue || [];
-      if (series.length < 2) { windows[key] = { ret: NaN, prov: "UNKNOWN" }; continue; }
+      if (series.length < 2) return { key, kind, ret: NaN, prov: "UNKNOWN" };
       const t0 = series[0][0], t1 = series[series.length - 1][0];
-      const dz = dietz(series, ledger, t0, t1);
+      const dz = dietzLedger(series, ledger, t0, t1, kind);
       const rB = benchmarkReturn(history?.candles?.BTC?.["1d"], t0, t1), rE = benchmarkReturn(history?.candles?.ETH?.["1d"], t0, t1);
       const feesW = stats.sum(fills.filter((f) => f.t >= t0 && f.t <= t1).map((f) => f.fee || 0));
       const fundW = stats.sum(uf.filter((f) => f.t >= t0 && f.t <= t1).map((f) => f.usdc));
       const costPct = dz.v0 > 0 ? (feesW - fundW) / dz.v0 : NaN; // positive = drag
       const pnlSeries = pf[key]?.pnl || [];
       const pnlW = pnlSeries.length ? pnlSeries[pnlSeries.length - 1][1] - pnlSeries[0][1] : NaN;
-      windows[key] = {
-        days: isNum(days) ? days : Math.round((t1 - t0) / D), t0, t1, ret: dz.ret, prov: dz.prov, v0: dz.v0, v1: dz.v1, flows: dz.flows, pnl: pnlW,
+      return {
+        key, kind, days: isNum(days) ? days : Math.round((t1 - t0) / D), t0, t1, ret: dz.ret, prov: dz.prov, v0: dz.v0, v1: dz.v1, flows: dz.flows, pnl: pnlW,
         btc: rB, eth: rE, mix: isNum(rB) && isNum(rE) ? (rB + rE) / 2 : NaN,
         alphaBTC: isNum(dz.ret) && isNum(rB) ? dz.ret - rB : NaN, alphaETH: isNum(dz.ret) && isNum(rE) ? dz.ret - rE : NaN, alphaMix: isNum(dz.ret) && isNum(rB) && isNum(rE) ? dz.ret - (rB + rE) / 2 : NaN, alphaNothing: dz.ret,
         fees: feesW, fundingNet: fundW, costPct, alphaBTCBeforeCosts: isNum(dz.ret) && isNum(rB) && isNum(costPct) ? dz.ret + costPct - rB : NaN,
-        mdd: maxDrawdown(series), ...sharpeSortino(series),
+        mdd: maxDrawdown(series), ...sharpeSortino(series), feesCoverage: fills.length && fills[0].t > t0 ? "PARTIAL" : "FULL",
       };
-    }
+    };
+    // trading windows use the perps-only series when the API provides them (it does on live data)
+    const hasPerp = !!pf.perpMonth;
+    windows.week = windowFor(hasPerp ? "perpWeek" : "week", 7, "perps");
+    windows.month = windowFor(hasPerp ? "perpMonth" : "month", 30, "perps");
+    windows.allTime = windowFor(hasPerp ? "perpAllTime" : "allTime", NaN, "perps");
+    windows.totalMonth = windowFor("month", 30, "total");
+    windows.totalAllTime = windowFor("allTime", NaN, "total");
+    const perpsAllTimePnl = pf.perpAllTime?.pnl?.length ? pf.perpAllTime.pnl[pf.perpAllTime.pnl.length - 1][1] : NaN;
+    const totalNow = pf.day?.accountValue?.length ? pf.day.accountValue[pf.day.accountValue.length - 1][1] : NaN;
+    const perpsNow = pf.perpDay?.accountValue?.length ? pf.perpDay.accountValue[pf.perpDay.accountValue.length - 1][1] : NaN;
+    const capital = { totalHL: totalNow, perps: isNum(perpsNow) ? perpsNow : snapshot?.account?.equity, other: isNum(totalNow) && isNum(perpsNow) ? totalNow - perpsNow : NaN, spot: history?.spot || null, deposits: stats.sum(ledger.filter((l) => /^deposit$/i.test(l.type)).map((l) => l.usdc)), withdrawals: stats.sum(ledger.filter((l) => /withdraw|^send$/i.test(l.type)).map((l) => l.usdc)), prov: isNum(totalNow) ? "HISTORICAL" : "UNKNOWN" };
     // attribution over the month window (ESTIMATED): beta × benchmark + funding + fees + residual
     const m = windows.month;
     let attribution = null;
@@ -130,21 +160,21 @@
       const beta = features?.portfolioAnalysis?.betaBTC;
       const avgEq = isNum(m.v0) && isNum(m.v1) ? (m.v0 + m.v1) / 2 : m.v0;
       const betaPnl = isNum(beta) ? beta * m.btc * avgEq : NaN;
-      const closedInWin = closed.filter((t) => t.closeTs >= m.t0);
+      const closedInWin = complete.filter((t) => t.closeTs >= m.t0);
       const longPnl = stats.sum(closedInWin.filter((t) => t.side === "LONG").map((t) => t.realized)), shortPnl = stats.sum(closedInWin.filter((t) => t.side === "SHORT").map((t) => t.realized));
       const residual = m.pnl - (isNum(betaPnl) ? betaPnl : 0) - m.fundingNet + m.fees;
       attribution = [
-        { name: "Beta BTC (marché)", value: betaPnl, note: isNum(beta) ? `β ${beta.toFixed(2)} × BTC ${(m.btc * 100).toFixed(1)}%` : "β inconnu", prov: "ESTIMATED" },
+        { name: "Beta BTC (marché)", value: betaPnl, note: isNum(beta) ? `β ${beta.toFixed(2)} × BTC ${(m.btc * 100).toFixed(1)}% (beta actuel, pas moyen)` : "β inconnu", prov: "ESTIMATED" },
         { name: "Sélection + timing (alpha idiosyncratique)", value: residual, note: "PnL − beta − funding + fees", prov: "ESTIMATED" },
         { name: "Funding net", value: m.fundingNet, note: "reçu − payé", prov: "HISTORICAL" },
-        { name: "Frais", value: -m.fees, note: "fills", prov: "HISTORICAL" },
+        { name: "Frais", value: -m.fees, note: m.feesCoverage === "PARTIAL" ? "fills partiels sur la fenêtre" : "fills", prov: "HISTORICAL" },
         { name: "Jambes courtes (hedge) réalisé", value: shortPnl, note: `${closedInWin.filter((t) => t.side === "SHORT").length} trades`, prov: "HISTORICAL" },
         { name: "Jambes longues réalisé", value: longPnl, note: `${closedInWin.filter((t) => t.side === "LONG").length} trades`, prov: "HISTORICAL" },
       ];
     }
-    // counterfactuals for closed trades within 30d (needs 1h candles)
+    // counterfactuals for closed trades within the 1h candle window
     const cf = [];
-    for (const t of closed.slice(-40)) {
+    for (const t of complete.slice(-40)) {
       const c1h = history?.candles?.[t.coin]?.["1h"];
       const btc1h = history?.candles?.BTC?.["1h"];
       if (!c1h?.length || t.openTs < c1h[0].t) { cf.push({ coin: t.coin, side: t.side, openTs: t.openTs, closeTs: t.closeTs, actual: t.net, hold: NaN, mfe: NaN, mae: NaN, btc: NaN, prov: "UNKNOWN" }); continue; }
@@ -161,14 +191,16 @@
     }
     // pattern statements (only when n≥5 in a bucket)
     const patterns = [];
-    for (const r of st.byRegime) if (r.n >= 5) patterns.push(`${r.key} : ${r.n} trades, win rate ${Math.round(r.winRate * 100)}%, net ${r.net >= 0 ? "+" : "−"}$${Math.abs(r.net).toFixed(0)}`);
+    for (const r of st.byRegime) if (r.n >= 5 && r.key !== "UNKNOWN") patterns.push(`${r.key} : ${r.n} trades, win rate ${Math.round(r.winRate * 100)}%, net ${r.net >= 0 ? "+" : "−"}$${Math.abs(r.net).toFixed(0)}`);
     for (const s of st.bySide) if (s.n >= 5) patterns.push(`${s.key} : ${s.n} trades, win rate ${Math.round(s.winRate * 100)}%, net ${s.net >= 0 ? "+" : "−"}$${Math.abs(s.net).toFixed(0)}`);
-    const sideRegime = AOS.util.groupBy(closed, (t) => t.side + " / " + (t.regime || "UNKNOWN"));
-    for (const [k, arr] of Object.entries(sideRegime)) if (arr.length >= 5) { const net = stats.sum(arr.map((t) => t.net)); patterns.push(`${k} : ${arr.length} trades, ${net >= 0 ? "crée" : "détruit"} de l'alpha (${net >= 0 ? "+" : "−"}$${Math.abs(net).toFixed(0)})`); }
+    const sideRegime = AOS.util.groupBy(complete, (t) => t.side + " / " + (t.regime || "UNKNOWN"));
+    for (const [k, arr] of Object.entries(sideRegime)) if (arr.length >= 5 && !/UNKNOWN/.test(k)) { const net = stats.sum(arr.map((t) => t.net)); patterns.push(`${k} : ${arr.length} trades, ${net >= 0 ? "crée" : "détruit"} de l'alpha (${net >= 0 ? "+" : "−"}$${Math.abs(net).toFixed(0)})`); }
     const captured = cf.filter((c) => isNum(c.captured));
     if (captured.length >= 5) patterns.push(`Capture moyenne du MFE : ${Math.round(stats.mean(captured.map((c) => clamp(c.captured, -1, 1))) * 100)}% (${captured.length} trades)`);
-    return { closed, open, stats: st, fundingPaid, fundingReceived, fundingNet: fundingReceived - fundingPaid, fundingByCoin, windows, attribution, counterfactuals: cf, patterns, leakage: { fees90d: stats.sum(fills.filter((f) => f.t > Date.now() - 90 * D).map((f) => f.fee || 0)), funding90d: stats.sum(uf.map((r) => r.usdc)) }, prov: fills.length ? "HISTORICAL" : "UNKNOWN", fillsCount: fills.length };
+    const fillsSpanDays = fills.length ? (fills[fills.length - 1].t - fills[0].t) / D : 0;
+    const activity = { fills: fills.length, spanDays: fillsSpanDays, fillsPerDay: fillsSpanDays > 0 ? fills.length / fillsSpanDays : NaN, tradesPerWeek: fillsSpanDays > 0 ? (closed.length / fillsSpanDays) * 7 : NaN, truncatedWindow: !!fills.truncated };
+    return { closed, open, complete, truncatedCount: rec.truncatedCount, stats: st, fundingPaid, fundingReceived, fundingNet: fundingReceived - fundingPaid, fundingByCoin, windows, capital, perpsAllTimePnl, attribution, counterfactuals: cf, patterns, activity, leakage: { fees90d: stats.sum(fills.map((f) => f.fee || 0)), feesWindowDays: fillsSpanDays, funding90d: stats.sum(uf.map((r) => r.usdc)) }, prov: fills.length ? "HISTORICAL" : "UNKNOWN", fillsCount: fills.length };
   }
 
-  AOS.alpha = { reconstructTrades, tradeStats, dietz, benchmarkReturn, maxDrawdown, sharpeSortino, compute };
+  AOS.alpha = { reconstructTrades, tradeStats, dietz, dietzLedger, benchmarkReturn, maxDrawdown, sharpeSortino, compute };
 })(typeof window !== "undefined" ? window : globalThis);

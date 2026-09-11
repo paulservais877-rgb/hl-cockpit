@@ -45,22 +45,57 @@
     return data;
   }
 
-  async function userFills(wallet) {
-    const key = `fills_${wallet.toLowerCase()}`;
+  /** Fills over a window. Hyperliquid caps each response at 2000 fills (newest first), so we page backwards by time. */
+  async function userFills(wallet, days = 30, maxPages = 5) {
+    const key = `fills_${wallet.toLowerCase()}_${days}`;
     const hit = cacheGet(key, TTL.fills);
     if (hit) return hit;
-    const raw = await hl.userFills(wallet);
-    const data = N.parseFills(raw);
+    const start = Date.now() - days * D;
+    let end = Date.now(), all = [], pages = 0;
+    const seen = new Set();
+    while (pages < maxPages) {
+      const raw = await hl.userFillsByTime(wallet, start, end);
+      const arr = Array.isArray(raw) ? raw : [];
+      pages++;
+      let oldest = Infinity;
+      for (const f of arr) { const id = f.tid ?? f.hash + ":" + f.oid; if (seen.has(id)) continue; seen.add(id); all.push(f); oldest = Math.min(oldest, Number(f.time)); }
+      if (arr.length < 2000 || !Number.isFinite(oldest) || oldest <= start) break;
+      end = oldest - 1;
+    }
+    const data = N.parseFills(all);
+    data.truncated = pages >= maxPages; // window not fully covered
     cacheSet(key, data);
     return data;
   }
 
-  async function userFunding(wallet, days = 90) {
+  /** User funding payments, paged forward (500 per response). */
+  async function userFunding(wallet, days = 90, maxPages = 12) {
     const key = `uf_${wallet.toLowerCase()}_${days}`;
     const hit = cacheGet(key, TTL.userFunding);
     if (hit) return hit;
-    const raw = await hl.userFunding(wallet, Date.now() - days * D, Date.now());
-    const data = N.parseUserFunding(raw);
+    let start = Date.now() - days * D, all = [], pages = 0;
+    const end = Date.now();
+    while (pages < maxPages) {
+      const raw = await hl.userFunding(wallet, start, end);
+      const arr = Array.isArray(raw) ? raw : [];
+      pages++;
+      all = all.concat(arr);
+      if (arr.length < 500) break;
+      const newest = Math.max(...arr.map((r) => Number(r.time)));
+      if (!Number.isFinite(newest) || newest <= start) break;
+      start = newest + 1;
+    }
+    const data = N.parseUserFunding(all);
+    cacheSet(key, data);
+    return data;
+  }
+
+  async function spot(wallet) {
+    const key = `spot_${wallet.toLowerCase()}`;
+    const hit = cacheGet(key, TTL.portfolio);
+    if (hit) return hit;
+    const raw = await hl.spotClearinghouseState(wallet);
+    const data = N.parseSpot(raw);
     cacheSet(key, data);
     return data;
   }
@@ -104,7 +139,7 @@
     const universe = new Set(Object.keys(snapshot?.meta?.assets || {}));
     const core = [...new Set([...majors, ...held])].filter((c) => universe.size === 0 || universe.has(c));
     const extra = [...new Set(watchlist)].filter((c) => !core.includes(c) && (universe.size === 0 || universe.has(c)));
-    const out = { candles: {}, funding: {}, l2: {}, fills: null, userFunding: null, portfolio: null, ledger: null, errors: [], loadedTs: Date.now() };
+    const out = { candles: {}, funding: {}, l2: {}, fills: null, userFunding: null, portfolio: null, ledger: null, spot: null, errors: [], loadedTs: Date.now() };
     const tasks = [];
     const wrap = (label, p, assign) => tasks.push(p.then(assign).catch((e) => out.errors.push(label + ": " + (e?.message || e))));
     for (const c of core) {
@@ -115,15 +150,16 @@
     for (const c of extra) wrap("candles1d " + c, candles(c, "1d", 40), (d) => { (out.candles[c] = out.candles[c] || {})["1d"] = expand(d); });
     for (const c of held) wrap("l2 " + c, l2(c), (d) => { out.l2[c] = d; });
     if (wallet) {
-      wrap("userFills", userFills(wallet), (d) => { out.fills = d; });
+      wrap("userFills", userFills(wallet, 30), (d) => { out.fills = d; });
       wrap("userFunding", userFunding(wallet, 90), (d) => { out.userFunding = d; });
       wrap("portfolio", portfolio(wallet), (d) => { out.portfolio = d; });
       wrap("ledger", ledger(wallet, 365), (d) => { out.ledger = d; });
+      wrap("spot", spot(wallet), (d) => { out.spot = d; });
     }
     let done = 0;
     await Promise.all(tasks.map((t) => t.then(() => onProgress?.(++done, tasks.length))));
     return out;
   }
 
-  AOS.history = { candles, expand, fundingHistory, userFills, userFunding, portfolio, ledger, l2, loadAll, TTL };
+  AOS.history = { candles, expand, fundingHistory, userFills, userFunding, portfolio, ledger, l2, spot, loadAll, TTL };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -20,10 +20,11 @@
     set($("#cmd-tiles"), html`
       <div class="card"><h3>Portfolio ${prov(acc.prov?.equity)}</h3>
         <div class="big" data-private>${fmt.usd(acc.equity)}</div>
-        <div class="sub2">PnL latent ${usdS(upnl)} · jour ${usdS(dayPnl)}</div>
-        ${kv("Marge utilisée", pct(acc.marginUtilisation, 0))}
+        <div class="sub2">equity perps · PnL latent ${usdS(upnl)} · jour ${usdS(dayPnl)}</div>
+        ${isNum(a.alpha?.capital?.totalHL) ? kv("Compte HL total (perps + spot/staking)", usd(a.alpha.capital.totalHL), { prov: a.alpha.capital.prov }) : ""}
+        ${kv("Marge utilisée · dispo", raw(`${pct(acc.marginUtilisation, 0).s} · ${usd(acc.withdrawable).s}`))}
         ${kv("Funding / jour", usdS(rk.fundingPerDay), { prov: "CALCULATED" })}
-        ${kv("Levier brut", fmt.x(pf.grossLev))}
+        ${kv("Levier brut · net", `${fmt.x(pf.grossLev)} · ${fmt.x(pf.netLev, 1)} ${pf.directional}`)}
       </div>
       <div class="card"><span class="stripe ${esc(rk.level)}"></span><h3>Risk ${lvlTag(rk.level)}</h3>
         <div class="big ${lvlCls}">${rk.level}</div>
@@ -62,9 +63,27 @@
         <div><div class="sym">${p.coin}</div>${sideTag(p.side)} ${p.isHypothetical ? tag("SIM", "info") : ""}</div>
         <div class="meta"><span data-private>${fmt.qty(p.absSize)} · ${fmt.usd(p.notional)}</span> · ${fmt.x(p.leverage, 0)} ${p.marginMode}<br/>entrée <span class="num">${px(p.entry)}</span> · mark <span class="num">${px(p.mark)}</span></div>
         <div class="pnl ${p.upnl >= 0 ? "pos" : "neg"}"><span data-private>${fmt.usdSigned(p.upnl)}</span><br/><small class="num" style="font-weight:500">${fmt.pct(p.roe, 1, true)}</small></div>
-        <div class="foot"><span class="verdict ${(v?.verdict || "").replace(" ", "")}">${v?.verdict || "—"}</span><span>liq <b class="num ${liqCls}">${fmt.pct(p.liqDist, 0)}</b> @ <span class="num">${px(p.liq)}</span></span><span>funding <b class="num">${fmt.usdSigned(p.fundingPerDay)}/j</b></span><span>gravité <b class="num">${g ? Math.round(g.share * 100) + "%" : "—"}</b></span>${isNum(p.stopLoss) ? html`<span>SL <b class="num">${px(p.stopLoss)}</b></span>` : tag("NO STOP", "warn")}${isNum(p.takeProfit) ? html`<span>TP <b class="num">${px(p.takeProfit)}</b></span>` : ""}</div>
+        <div class="foot"><span class="verdict ${(v?.verdict || "").replace(" ", "")}">${v?.verdict || "—"}</span><span>liq ${p.noLiqAlone ? raw('<b class="num pos" title="Aucune liquidation atteignable par cet actif seul (cross)">∞ seul</b>') : raw(`<b class="num ${liqCls}">${esc(fmt.pct(p.liqDist, 0))}</b> @ <span class="num">${px(p.liq)}</span>${p.prov.liq === "CALCULATED" ? '<span class="prov">CALC</span>' : ""}`)}</span><span>funding <b class="num">${fmt.usdSigned(p.fundingPerDay)}/j</b></span><span>gravité <b class="num">${g ? Math.round(g.share * 100) + "%" : "—"}</b></span>${isNum(p.stopLoss) ? html`<span>SL <b class="num">${px(p.stopLoss)}</b></span>` : tag("NO STOP", "warn")}${isNum(p.takeProfit) ? html`<span>TP <b class="num">${px(p.takeProfit)}</b></span>` : ""}</div>
       </div>`.s;
     }).join("")));
+    V.orders(a);
+  };
+
+  /** Open orders that are not TP/SL of a position: conditional exposure if filled. */
+  V.orders = function (a) {
+    const el = $("#orders");
+    if (!el) return;
+    const s = a.snapshot, eq = s.account.equity;
+    const pending = s.orders.filter((o) => !o.reduceOnly && !o.isPositionTpsl);
+    const closing = s.orders.filter((o) => o.reduceOnly || o.isPositionTpsl);
+    if (!s.orders.length) { el.hidden = true; return; }
+    el.hidden = false;
+    const row = (o) => { const px0 = isNum(o.triggerPx) && o.triggerPx > 0 ? o.triggerPx : o.limitPx; const ntl = isNum(o.sz) && isNum(px0) ? o.sz * px0 : NaN; const mark = s.meta.assets[o.coin]?.markPx; return `<tr><td class="t"><b>${esc(o.coin)}</b> <span class="tag ${o.side === "BUY" ? "long" : "short"}">${esc(o.side)}</span></td><td class="t">${esc(o.type)}${o.isTrigger ? " · trig " + esc(fmt.px(o.triggerPx)) : ""}</td><td class="r">${esc(fmt.qty(o.sz))}</td><td class="r">${esc(fmt.px(o.limitPx))}</td><td class="r">${isNum(mark) && isNum(px0) && mark > 0 ? esc(fmt.pct(px0 / mark - 1, 1, true)) : "—"}</td><td class="r" data-private>${esc(fmt.usd(ntl))}</td><td class="r">${isNum(ntl) && isNum(eq) && eq > 0 ? esc(fmt.x(ntl / eq, 1)) : "—"}</td></tr>`; };
+    const pendNtl = stats.sum(pending.map((o) => (isNum(o.sz) && isNum(o.limitPx) ? o.sz * o.limitPx : 0)));
+    set(el, html`<div class="card"><h3>Ordres ouverts ${prov("LIVE")} <span class="tag ${pendNtl > (eq || 0) ? "warn" : ""}">exposition conditionnelle ${fmt.usd(pendNtl)} · ${isNum(eq) && eq > 0 ? fmt.x(pendNtl / eq, 1) + " equity" : "—"}</span></h3>
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Ordre</th><th>Type</th><th class="r">Taille</th><th class="r">Limite</th><th class="r">vs mark</th><th class="r">Notional</th><th class="r">× equity</th></tr></thead><tbody>${raw(pending.map(row).join(""))}${closing.length ? raw(`<tr><td colspan="7" class="t dimc">Ordres de sortie (reduce-only / TP-SL) : ${closing.map((o) => `${esc(o.coin)} ${esc(o.kind)} ${esc(fmt.px(isNum(o.triggerPx) && o.triggerPx > 0 ? o.triggerPx : o.limitPx))}`).join(" · ")}</td></tr>`) : ""}</tbody></table></div>
+      ${pendNtl > (eq || 0) * 0.5 ? html`<div class="hint warnc" style="margin-top:6px">Si ces ordres s'exécutent, l'exposition brute augmente de ${fmt.usd(pendNtl)} avec seulement ${fmt.usd(s.account.withdrawable)} de marge disponible : SENTINEL ne les voit pas comme du risque tant qu'ils ne sont pas remplis, mais ils sont remplis précisément quand le marché va contre toi.</div>` : ""}
+    </div>`);
   };
 
   V.positionDetail = function (a, coin) {

@@ -236,7 +236,7 @@
   }
 
   /** Narrative rotation: relative 7d/30d performance vs BTC by sector (needs 1d candles). */
-  const SECTORS = { BTC: ["BTC"], ETH: ["ETH"], SOL: ["SOL"], "L1/Exchange": ["BNB", "HYPE", "SUI", "AVAX"], AI: ["TAO", "RENDER", "FET", "NEAR"], DeFi: ["LINK", "PENDLE", "AAVE", "UNI"], RWA: ["ONDO"], Meme: ["DOGE", "PEPE", "WIF"] };
+  const SECTORS = { BTC: ["BTC"], ETH: ["ETH"], SOL: ["SOL"], "L1 alt": ["ADA", "AVAX", "SUI", "NEAR", "XMR"], "Exchange": ["BNB", "HYPE"], AI: ["TAO", "RENDER", "FET"], DeFi: ["LINK", "PENDLE", "AAVE", "UNI"], RWA: ["ONDO"], Meme: ["DOGE", "PEPE", "WIF"] };
   function narrativeRotation(featuresByCoin) {
     const btc7 = featuresByCoin.BTC?.d1?.ret7d, btc30 = featuresByCoin.BTC?.d1?.ret30d;
     const rows = [];

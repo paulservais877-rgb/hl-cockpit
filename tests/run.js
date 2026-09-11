@@ -42,9 +42,18 @@ const snap2 = AOS.normalize.buildSnapshot({ wallet: fx.wallet, state: { assetPos
 t("degraded snapshot lists partial endpoints", snap2.partial.length === 4, snap2.partial.join(","));
 t("position without ctx has UNKNOWN mark", snap2.positions[0].prov.mark === "UNKNOWN");
 t("candles parse", AOS.normalize.parseCandles([{ t: "1", o: "1", h: "2", l: "0.5", c: "1.5", v: "10" }]).length === 1);
+const bnb = snap.positions.find((p) => p.coin === "BNB");
+t("null liquidationPx → UNKNOWN before pipeline", !isNum(bnb.liq) && bnb.prov.liq === "UNKNOWN");
+t("margin tiers parsed for BTC", Array.isArray(snap.meta.assets.BTC.marginTiers) && snap.meta.assets.BTC.marginTiers.length === 2);
+t("tiered mm rate: small notional 0.5/40, huge notional 0.5/20", near(AOS.normalize.mmRateForNotional(snap.meta.assets.BTC, 1000), 0.0125, 1e-9) && near(AOS.normalize.mmRateForNotional(snap.meta.assets.BTC, 2e8), 0.025, 1e-9));
+const lg = AOS.normalize.parseLedger(fx.ledger);
+t("ledger flows signed (deposit +, send −, staking → total only)", lg[0].flowPerps === 15000 && lg[3].flowPerps === -500 && lg[2].flowPerps === 0 && lg[2].flowTotal === -77.2, JSON.stringify(lg));
+const spotP = AOS.normalize.parseSpot(fx.spotClearinghouseState);
+t("spot parsed", spotP.usdc === 1200.5 && spotP.balances.length === 2 && spotP.prov === "LIVE");
+t("frontendOpenOrders limit (triggerPx '0.0') is LIMIT not trigger", snap.orders.find((o) => o.coin === "BTC" && o.limitPx === 60000).kind === "LIMIT");
 
 console.log("== features ==");
-const history = { candles: fx.history.candles, funding: fx.history.funding, l2: fx.history.l2, fills: AOS.normalize.parseFills(fx.fills), userFunding: AOS.normalize.parseUserFunding(fx.userFunding), portfolio: AOS.normalize.parsePortfolio(fx.portfolio), ledger: AOS.normalize.parseLedger(fx.ledger), errors: [] };
+const history = { candles: fx.history.candles, funding: fx.history.funding, l2: fx.history.l2, fills: AOS.normalize.parseFills(fx.fills), userFunding: AOS.normalize.parseUserFunding(fx.userFunding), portfolio: AOS.normalize.parsePortfolio(fx.portfolio), ledger: AOS.normalize.parseLedger(fx.ledger), spot: AOS.normalize.parseSpot(fx.spotClearinghouseState), errors: [] };
 const feats = AOS.features.compute(snap, history, {});
 t("BTC d1 features", !!feats.byCoin.BTC.d1 && isNum(feats.byCoin.BTC.d1.ema50));
 t("BTC h4 features", !!feats.byCoin.BTC.h4 && isNum(feats.byCoin.BTC.h4.atr));
@@ -124,21 +133,27 @@ t("cone deterministic with seed", (() => { const c2 = AOS.cone.simulate(snap.pos
 
 console.log("== alpha ==");
 const alpha = AOS.alpha.compute(snap, history, feats);
-t("trades reconstructed", alpha.closed.length === 6, String(alpha.closed.length));
+t("trades reconstructed (6 complete + 1 truncated)", alpha.closed.length === 7 && alpha.complete.length === 6 && alpha.truncatedCount === 1, `${alpha.closed.length}/${alpha.complete.length}/${alpha.truncatedCount}`);
+t("truncated trade flagged and excluded from stats", alpha.closed.find((x) => x.coin === "XMR").truncated === true && alpha.stats.n === 6);
 t("open trades = 4", alpha.open.length === 4, String(alpha.open.length));
-t("first trade BTC long win", alpha.closed[0].coin === "BTC" && alpha.closed[0].side === "LONG" && alpha.closed[0].net > 0);
+t("first complete trade BTC long win", alpha.complete[0].coin === "BTC" && alpha.complete[0].side === "LONG" && alpha.complete[0].net > 0);
 t("stats win rate in [0,1]", alpha.stats.winRate >= 0 && alpha.stats.winRate <= 1);
-t("month window return computed", isNum(alpha.windows.month.ret), JSON.stringify(alpha.windows.month.prov));
+t("month window uses perps series", alpha.windows.month.key === "perpMonth" && isNum(alpha.windows.month.ret), JSON.stringify(alpha.windows.month.prov));
+t("total-account window present", alpha.windows.totalMonth.key === "month" && isNum(alpha.windows.totalMonth.ret));
+t("capital split total vs perps", near(alpha.capital.other, 6000, 1), String(alpha.capital.other));
 t("alpha vs BTC computed", isNum(alpha.windows.month.alphaBTC));
 t("funding paid > 0", alpha.fundingPaid > 0);
 t("attribution present", Array.isArray(alpha.attribution) && alpha.attribution.length === 6);
-const dz = AOS.alpha.dietz([[0, 1000], [10, 1200]], [{ t: 5, type: "deposit", usdc: 100 }], 0, 10);
+const dz = AOS.alpha.dietz([[0, 1000], [10, 1200]], [{ t: 5, amt: 100 }], 0, 10);
 t("dietz with deposit", near(dz.ret, (1200 - 1000 - 100) / (1000 + 50), 1e-9), String(dz.ret));
+t("dietz ledger wrapper (perps kind ignores staking)", near(AOS.alpha.dietzLedger([[0, 1000], [10, 1100]], [{ t: 5, flowPerps: 0, flowTotal: -50 }], 0, 10, "perps").ret, 0.1, 1e-9));
 
 console.log("== agents & pipeline ==");
 const analysis = AOS.pipeline.run(snap, history, AOS.store.settings, null, { persist: true });
 for (const name of ["ORACLE", "FLOW", "EDGE", "ALLOCATOR", "SENTINEL", "ARCHIVE"]) t(name + " structured output", analysis.agents[name] && analysis.agents[name].agent === name && typeof analysis.agents[name].recommendation === "string");
 t("ORACLE votes for held coins", Object.keys(analysis.agents.ORACLE.votes).includes("BNB"));
+const bnbA = analysis.snapshot.positions.find((p) => p.coin === "BNB");
+t("pipeline fills null liq with model value (CALCULATED)", bnbA.prov.liq === "CALCULATED" && (bnbA.noLiqAlone === true || (isNum(bnbA.liq) && bnbA.liq < bnbA.mark)), JSON.stringify({ liq: bnbA.liq, none: bnbA.noLiqAlone }));
 t("FLOW reports unknown data honestly", analysis.agents.FLOW.unknown.length >= 3);
 t("SENTINEL has no votes", !analysis.agents.SENTINEL.votes);
 t("conviction 0-100", Object.values(analysis.orchestration.convictions).every((c) => c.long >= 0 && c.long <= 100 && c.long + c.short === 100));

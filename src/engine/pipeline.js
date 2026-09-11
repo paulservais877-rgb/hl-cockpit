@@ -10,6 +10,17 @@
     const t0 = Date.now();
     const timings = {};
     const lap = (k) => { timings[k] = Date.now() - t0; };
+    // Hyperliquid returns liquidationPx = null when the asset alone cannot liquidate the cross account (price would be ≤ 0).
+    // Fill in the model value (CALCULATED) or flag "no liquidation from this asset alone".
+    const model0 = AOS.risk.marginModel(snapshot.positions || [], snapshot.account || {});
+    for (const p of snapshot.positions || []) {
+      if (isNum(p.liq) || !isNum(p.mark) || p.marginMode === "isolated") continue;
+      const lp = AOS.simulate.liqPriceFor(p, snapshot.positions, snapshot.account, model0);
+      if (!isNum(lp)) continue;
+      if (lp > 0 && (p.side === "LONG" ? lp < p.mark : lp > p.mark)) { p.liq = lp; p.liqDist = p.side === "LONG" ? (p.mark - lp) / p.mark : (lp - p.mark) / p.mark; p.noLiqAlone = false; }
+      else { p.liq = NaN; p.liqDist = 1; p.noLiqAlone = true; }
+      p.prov.liq = "CALCULATED";
+    }
     const features = AOS.features.compute(snapshot, history, { stressCorr: settings?.risk?.normalCorrStress ?? 0.95 });
     // portfolio drawdown 30d from account value history (for the risk budget)
     const av = history?.portfolio?.month?.accountValue;

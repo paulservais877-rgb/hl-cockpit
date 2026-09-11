@@ -80,6 +80,7 @@
     portfolio: (user, o) => info({ type: "portfolio", user }, o),
     ledger: (user, startTime, endTime, o) => info({ type: "userNonFundingLedgerUpdates", user, startTime, endTime }, o),
     l2Book: (coin, o) => info({ type: "l2Book", coin }, o),
+    spotClearinghouseState: (user, o) => info({ type: "spotClearinghouseState", user }, o),
   };
 
   AOS.hl = api;

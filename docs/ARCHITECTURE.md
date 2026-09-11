@@ -11,7 +11,7 @@ Ce document remplace l'« audit » demandé dans le prompt maître : l'ancien da
 2. **Les six agents sont déterministes (règles + statistiques), pas des LLM.** C'est un choix : un agent LLM qui annonce « Re-Accumulation, 74 % » sans calcul sous-jacent est du théâtre. Ici chaque score est reproductible, testé (100 assertions Node), et étiqueté `CALCULATED` / `ESTIMATED`. Une couche LLM (explications narratives, filtrage de news) est prévue en phase 3, derrière un backend.
 3. **Les probabilités d'EDGE sont des priors** (ex. breakout 42 %, mean reversion 52 %) ajustés par régime et flow. Elles sont affichées comme intervalle avec « HIGH uncertainty » tant que moins de 30 décisions par type de setup ne sont pas résolues. Le système se recalibre tout seul ensuite (§6). À ta fréquence de trading (≈ 1–3 trades/semaine), la calibration statistique met **des mois** à devenir significative. C'est une limite réelle, pas un défaut d'implémentation.
 4. **Le dépôt est public et contient ton adresse wallet** (depuis la v5). Toute personne peut voir tes positions on-chain. Je n'ai donc mis **aucune donnée financière personnelle** dans le code : le « capital firewall » (salaire, crédits, capital core) se saisit dans Settings et reste dans le `localStorage` du navigateur.
-5. **Vérification API.** Le proxy de la session a bloqué `api.hyperliquid.xyz` et la doc Hyperliquid. Les parsers ont été écrits d'après la doc connue et sont tolérants (tout champ manquant devient `UNKNOWN`, jamais inventé), mais la première synchronisation réelle reste à valider par toi. Point à surveiller en priorité : `frontendOpenOrders` (repli automatique sur `openOrders`), `portfolio`, `userNonFundingLedgerUpdates`.
+5. **Vérification API : faite sur le wallet réel** via GitHub Actions (`tests/diagnostic.js`, exécuté à chaque push par la CI). Les 14 endpoints répondent en 120–210 ms ; le modèle de marge de maintenance tombe exactement sur `crossMaintenanceMarginUsed` (facteur 1.000). Voir §11 pour ce que les données réelles ont changé.
 
 ---
 
@@ -152,11 +152,29 @@ Non testé automatiquement : le rendu (vérifié manuellement en Chromium headle
 
 ---
 
+## 11. Validation sur données réelles (wallet `0x35f0…ab07`, 11/09/2026)
+
+Constats et adaptations :
+
+| Constat sur l'API réelle | Adaptation |
+|---|---|
+| `liquidationPx` est `null` sur les longs quand l'actif seul ne peut pas liquider le compte cross | le pipeline calcule la valeur modèle (`CALCULATED`) ou affiche « ∞ seul » |
+| `userFills` : 2 000 fills max par réponse, soit 19 jours sur ce compte ; premier fill en milieu de position (`startPosition ≠ 0`) | pagination par temps (`userFillsByTime`, 30 j, 5 pages) ; les trades commencés avant la fenêtre sont marqués `truncated` et exclus des statistiques |
+| `userFunding` : 500 entrées max (≈ 6 jours) | pagination avant (12 pages) |
+| `portfolio` expose `perpDay/perpWeek/perpMonth/perpAllTime` en plus des séries du compte total (29 424 $ total vs 7 733 $ perps) | l'alpha du trading utilise les séries perps ; le compte total est affiché à part ; `perpAllTime` PnL affiché tel quel |
+| `userNonFundingLedgerUpdates` : types `deposit`, `send`, `cStakingTransfer` (+ `accountClassTransfer`, `withdraw`) | flux signés séparément pour perps et total (Dietz) |
+| `metaAndAssetCtxs` : `marginTables` par paliers de notional, `marginTableId` par actif | taux de maintenance par palier |
+| `frontendOpenOrders` : `triggerPx: "0.0"` sur les limites, `orderType: "Stop Market"`, `isPositionTpsl` | parser confirmé ; ordres non reduce-only affichés avec leur **exposition conditionnelle** (ici 0,5 BTC @ 60 000 = 4× l'equity perps) |
+| `withdrawable` = 27 $ pour 7 444 $ d'equity | affiché dans la tuile Portfolio (marge disponible) |
+| Fills sur des perps HIP-3 (`xyz:SP500`, `io:ANTH`) | supportés tels quels (pas de contexte d'actif → `UNKNOWN`) |
+
+Ce que les chiffres réels disent, sans enrobage : 5 positions cross pour un levier effectif de 5×, net short, 27 $ de marge disponible, 2 000 fills en 19 jours, et un PnL perps cumulé de **−62 678 $** depuis janvier d'après l'API `portfolio`. Le dashboard n'est utile que s'il fait baisser l'activité et le levier, pas s'il les justifie.
+
 ## TOP 10 HIGHEST-IMPACT IMPROVEMENTS (classés)
 
 | # | Amélioration | Alpha | Risque ↓ | Complexité | Priorité |
 |---|---|---|---|---|---|
-| 1 | Valider les parsers sur ton wallet réel (première synchro) | — | ★★★ | faible | **maintenant** |
+| 1 | ~~Valider les parsers sur ton wallet réel~~ fait (§11) → merger dans `main` pour publier sur GitHub Pages | — | ★★★ | faible | **maintenant** |
 | 2 | Renseigner le capital firewall (sizing plafonné au capital de trading, pas à l'equity) | ★ | ★★★ | nulle | **maintenant** |
 | 3 | Backend watcher + notifications push (alertes liquidation/régime hors onglet) | ★ | ★★★ | moyenne | haute |
 | 4 | Persistance serveur de la mémoire (calls, décisions, journal) pour ne rien perdre entre appareils | ★★ | ★ | moyenne | haute |

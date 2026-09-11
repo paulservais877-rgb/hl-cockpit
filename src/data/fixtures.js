@@ -33,7 +33,7 @@
     { coin: "BTC", szi: 0.42, entryPx: 86400, lev: 8, liq: 62150 },
     { coin: "SOL", szi: 120, entryPx: 139.0, lev: 5, liq: 88.5 },
     { coin: "ETH", szi: -4.0, entryPx: 3260, lev: 6, liq: 4980 },
-    { coin: "BNB", szi: 6.0, entryPx: 598, lev: 3, liq: 402 },
+    { coin: "BNB", szi: 6.0, entryPx: 598, lev: 3, liq: null }, // null = no liquidation reachable alone (as returned by the live API)
   ];
   const assetPositions = positions.map((p) => {
     const mark = px[p.coin];
@@ -43,7 +43,7 @@
       type: "oneWay",
       position: {
         coin: p.coin, szi: String(p.szi), leverage: { type: "cross", value: p.lev }, entryPx: String(p.entryPx), positionValue: String(notional),
-        unrealizedPnl: String(upnl), returnOnEquity: String(upnl / (notional / p.lev)), liquidationPx: String(p.liq), marginUsed: String(notional / p.lev),
+        unrealizedPnl: String(upnl), returnOnEquity: String(upnl / (notional / p.lev)), liquidationPx: p.liq === null ? null : String(p.liq), marginUsed: String(notional / p.lev),
         maxLeverage: universe.find((u) => u.name === p.coin).maxLeverage, cumFunding: { allTime: "312.4", sinceOpen: "84.2", sinceChange: "12.1" },
       },
     };
@@ -65,8 +65,12 @@
     { coin: "BTC", side: "A", sz: "0.42", origSz: "0.42", limitPx: "80000", triggerPx: "82000", isTrigger: true, reduceOnly: true, orderType: "Stop Market", tpsl: "sl", isPositionTpsl: true, oid: 1, timestamp: Date.now() - 3 * 86400e3 },
     { coin: "BTC", side: "A", sz: "0.21", origSz: "0.21", limitPx: "98500", triggerPx: "98000", isTrigger: true, reduceOnly: true, orderType: "Take Profit Market", tpsl: "tp", isPositionTpsl: true, oid: 2, timestamp: Date.now() - 3 * 86400e3 },
     { coin: "ETH", side: "B", sz: "4.0", origSz: "4.0", limitPx: "3400", triggerPx: "3390", isTrigger: true, reduceOnly: true, orderType: "Stop Market", tpsl: "sl", isPositionTpsl: true, oid: 3, timestamp: Date.now() - 86400e3 },
-    { coin: "SOL", side: "B", sz: "60", origSz: "60", limitPx: "131", isTrigger: false, reduceOnly: false, orderType: "Limit", oid: 4, timestamp: Date.now() - 5 * 3600e3 },
+    { coin: "SOL", side: "B", sz: "60", origSz: "60", limitPx: "131", isTrigger: false, reduceOnly: false, orderType: "Limit", oid: 4, timestamp: Date.now() - 5 * 3600e3, triggerPx: "0.0", triggerCondition: "N/A", isPositionTpsl: false, tif: "Gtc" },
+    { coin: "BTC", side: "B", sz: "0.5", origSz: "0.5", limitPx: "60000", isTrigger: false, reduceOnly: false, orderType: "Limit", oid: 5, timestamp: Date.now() - 4 * 86400e3, triggerPx: "0.0", triggerCondition: "N/A", isPositionTpsl: false, tif: "Gtc" },
   ];
+  const marginTables = [[40, { description: "", marginTiers: [{ lowerBound: "0.0", maxLeverage: 40 }, { lowerBound: "150000000.0", maxLeverage: 20 }] }]];
+  universe.forEach((u) => { if (u.name === "BTC") u.marginTableId = 40; });
+  metaAndAssetCtxs[0].marginTables = marginTables;
 
   const predictedFundings = universe.map((u) => [u.name, [["BinPerp", { fundingRate: String(Number(ctxs.find((c, i) => universe[i].name === u.name).funding) * 8 * 0.9), nextFundingTime: Date.now() + 3 * 3600e3, fundingIntervalHours: 8 }], ["HlPerp", { fundingRate: ctxs.find((c, i) => universe[i].name === u.name).funding, nextFundingTime: Date.now() + 1800e3, fundingIntervalHours: 1 }]]]);
 
@@ -109,13 +113,14 @@
     ["SOL", "Open Long", 80, 128], ["SOL", "Close Long", 80, 141], ["ETH", "Open Short", 2, 3390], ["ETH", "Close Short", 2, 3455],
     ["BTC", "Open Long", 0.42, 86400], ["SOL", "Open Long", 120, 139], ["ETH", "Open Short", 4, 3260], ["BNB", "Open Long", 6, 598],
   ];
-  let startPos = {};
+  let startPos = { XMR: 3 }; // XMR: position opened before the fill window (truncated history, as on live data)
+  trades.unshift(["XMR", "Close Long", 3, 410]);
   for (const [coin, dir, sz, p] of trades) {
     t += (2 + fr() * 6) * 86400e3;
     const isBuy = /Long/.test(dir) ? /Open/.test(dir) : /Close/.test(dir);
     const sp = startPos[coin] || 0;
     let closedPnl = 0;
-    if (/Close/.test(dir)) { const opener = [...fills].reverse().find((f) => f.coin === coin && /Open/.test(f.dir)); closedPnl = (/Long/.test(dir) ? 1 : -1) * sz * (p - Number(opener.px)); }
+    if (/Close/.test(dir)) { const opener = [...fills].reverse().find((f) => f.coin === coin && /Open/.test(f.dir)); closedPnl = opener ? (/Long/.test(dir) ? 1 : -1) * sz * (p - Number(opener.px)) : 120; }
     fills.push({ coin, px: String(p), sz: String(sz), side: isBuy ? "B" : "A", time: Math.min(t, Date.now() - 3600e3), startPosition: String(sp), dir, closedPnl: String(closedPnl), fee: String(sz * p * 0.00035), feeToken: "USDC", oid: fills.length + 1, tid: fills.length + 1, crossed: true });
     startPos[coin] = sp + (isBuy ? sz : -sz);
   }
@@ -130,8 +135,11 @@
   let av = 18400;
   for (let i = 0; i < 30; i++) { const ts = Date.now() - (29 - i) * 86400e3; av += (pr() - 0.45) * 600; avHist.push([ts, String(av)]); pnlHist.push([ts, String(av - 18400)]); }
   avHist[avHist.length - 1][1] = String(accountValue); pnlHist[pnlHist.length - 1][1] = String(accountValue - 18400);
-  const portfolio = [["day", { accountValueHistory: avHist.slice(-2), pnlHistory: pnlHist.slice(-2), vlm: "50000" }], ["week", { accountValueHistory: avHist.slice(-8), pnlHistory: pnlHist.slice(-8), vlm: "210000" }], ["month", { accountValueHistory: avHist, pnlHistory: pnlHist, vlm: "640000" }], ["allTime", { accountValueHistory: avHist, pnlHistory: pnlHist, vlm: "2100000" }]];
-  const ledger = [{ time: Date.now() - 120 * 86400e3, hash: "0x", delta: { type: "deposit", usdc: "15000" } }, { time: Date.now() - 45 * 86400e3, hash: "0x", delta: { type: "deposit", usdc: "3000" } }];
+  const totalHist = avHist.map(([t, v]) => [t, String(Number(v) + 6000)]); // whole account = perps + 6000 in spot/staking
+  const portfolio = [["day", { accountValueHistory: totalHist.slice(-2), pnlHistory: pnlHist.slice(-2), vlm: "50000" }], ["week", { accountValueHistory: totalHist.slice(-8), pnlHistory: pnlHist.slice(-8), vlm: "210000" }], ["month", { accountValueHistory: totalHist, pnlHistory: pnlHist, vlm: "640000" }], ["allTime", { accountValueHistory: totalHist, pnlHistory: pnlHist, vlm: "2100000" }],
+    ["perpDay", { accountValueHistory: avHist.slice(-2), pnlHistory: pnlHist.slice(-2), vlm: "50000" }], ["perpWeek", { accountValueHistory: avHist.slice(-8), pnlHistory: pnlHist.slice(-8), vlm: "210000" }], ["perpMonth", { accountValueHistory: avHist, pnlHistory: pnlHist, vlm: "640000" }], ["perpAllTime", { accountValueHistory: avHist, pnlHistory: pnlHist, vlm: "2100000" }]];
+  const ledger = [{ time: Date.now() - 120 * 86400e3, hash: "0x", delta: { type: "deposit", usdc: "15000" } }, { time: Date.now() - 45 * 86400e3, hash: "0x", delta: { type: "deposit", usdc: "3000" } }, { time: Date.now() - 20 * 86400e3, hash: "0x", delta: { type: "cStakingTransfer", amount: "77.2", token: "HYPE" } }, { time: Date.now() - 10 * 86400e3, hash: "0x", delta: { type: "send", usdc: "500", destination: "0xabc" } }];
+  const spotClearinghouseState = { balances: [{ coin: "USDC", token: 0, total: "1200.5", hold: "0", entryNtl: "0" }, { coin: "HYPE", token: 150, total: "60", hold: "0", entryNtl: "1500" }] };
 
-  AOS.fixtures = { wallet: "0x" + "0".repeat(36) + "de40", metaAndAssetCtxs, allMids, clearinghouseState, openOrders, predictedFundings, history: hist, fills, userFunding, portfolio, ledger, px };
+  AOS.fixtures = { wallet: "0x" + "0".repeat(36) + "de40", metaAndAssetCtxs, allMids, clearinghouseState, openOrders, predictedFundings, history: hist, fills, userFunding, portfolio, ledger, spotClearinghouseState, px };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -10,12 +10,26 @@
   // Source: Hyperliquid docs (margining). mmRate = 0.5 / maxLeverage. Tagged CALCULATED.
   const mmRateFor = (maxLeverage) => (isNum(maxLeverage) && maxLeverage > 0 ? 0.5 / maxLeverage : NaN);
 
+  /** Tiered maintenance rate: marginTables give maxLeverage per notional tier (lowerBound). Verified on live data. */
+  function mmRateForNotional(asset, notional) {
+    const tiers = asset?.marginTiers;
+    if (Array.isArray(tiers) && tiers.length && isNum(notional)) {
+      let lev = tiers[0].maxLeverage;
+      for (const t of tiers) if (notional >= t.lowerBound) lev = t.maxLeverage;
+      return mmRateFor(lev);
+    }
+    return asset?.mmRate ?? NaN;
+  }
+
   function parseMeta(metaAndCtxs) {
-    // metaAndAssetCtxs => [ {universe:[{name, szDecimals, maxLeverage, onlyIsolated}]}, [ {funding, openInterest, prevDayPx, dayNtlVlm, premium, oraclePx, markPx, midPx, impactPxs} ] ]
+    // metaAndAssetCtxs => [ {universe:[{name, szDecimals, maxLeverage, onlyIsolated, marginTableId, isDelisted}], marginTables:[[id,{marginTiers:[{lowerBound, maxLeverage}]}]]},
+    //                       [ {funding, openInterest, prevDayPx, dayNtlVlm, premium, oraclePx, markPx, midPx, impactPxs, dayBaseVlm} ] ]
     const out = { assets: {}, ok: false };
     if (!Array.isArray(metaAndCtxs) || metaAndCtxs.length < 2) return out;
     const universe = metaAndCtxs[0]?.universe || [];
     const ctxs = Array.isArray(metaAndCtxs[1]) ? metaAndCtxs[1] : [];
+    const tables = {};
+    for (const t of metaAndCtxs[0]?.marginTables || []) { const id = t?.[0], tiers = t?.[1]?.marginTiers; if (id !== undefined && Array.isArray(tiers)) tables[id] = tiers.map((x) => ({ lowerBound: num(x.lowerBound), maxLeverage: num(x.maxLeverage) })).filter((x) => isNum(x.lowerBound) && isNum(x.maxLeverage)).sort((a, b) => a.lowerBound - b.lowerBound); }
     universe.forEach((u, i) => {
       const c = ctxs[i] || {};
       const name = u?.name;
@@ -27,6 +41,8 @@
         szDecimals: num(u.szDecimals),
         maxLeverage: num(u.maxLeverage),
         onlyIsolated: !!u.onlyIsolated,
+        isDelisted: !!u.isDelisted,
+        marginTiers: tables[u.marginTableId] || null,
         mmRate: mmRateFor(num(u.maxLeverage)),
         fundingHourly: num(c.funding), // HL funding is paid hourly; this is the current hourly rate
         openInterest: oi,
@@ -103,10 +119,11 @@
       const fundingHourly = num(a.fundingHourly);
       // positive funding => longs pay shorts
       const fundingPerHour = isNum(fundingHourly) && isNum(notional) ? (side === "LONG" ? -1 : 1) * notional * fundingHourly : NaN;
+      const mmRate = mmRateForNotional(a, notional);
       out.push({
         coin, side, szi, absSize, entry, mark, liq, liqDist, notional, upnl, roe, leverage, marginMode, marginUsed,
-        maxLeverage: num(a.maxLeverage), mmRate: a.mmRate,
-        mmEstimate: isNum(notional) && isNum(a.mmRate) ? notional * a.mmRate : NaN,
+        maxLeverage: num(p.maxLeverage ?? a.maxLeverage), mmRate,
+        mmEstimate: isNum(notional) && isNum(mmRate) ? notional * mmRate : NaN,
         fundingHourly, fundingPerHour, fundingPerDay: isNum(fundingPerHour) ? fundingPerHour * 24 : NaN,
         cumFunding: { allTime: num(cf.allTime), sinceOpen: num(cf.sinceOpen), sinceChange: num(cf.sinceChange) },
         prov: {
@@ -220,12 +237,31 @@
   }
 
   function parseLedger(raw) {
-    // userNonFundingLedgerUpdates => [{time, hash, delta:{type:"deposit"|"withdraw"|..., usdc}}]
+    // userNonFundingLedgerUpdates => [{time, hash, delta:{type:"deposit"|"withdraw"|"send"|"cStakingTransfer"|"accountClassTransfer"|"spotTransfer"|…, usdc|amount, toPerp?, token?}}]
+    // Signed flows (verified on live data): deposit → +perps; withdraw/send → −; accountClassTransfer → ±perps (toPerp); cStakingTransfer → −total (leaves the trading account)
     if (!Array.isArray(raw)) return [];
     return raw
-      .map((r) => ({ t: num(r.time), type: r.delta?.type || "", usdc: num(r.delta?.usdc ?? r.delta?.amount) }))
+      .map((r) => {
+        const d = r.delta || {};
+        const type = d.type || "";
+        const amt = Math.abs(num(d.usdc ?? d.amount));
+        let perps = 0, total = 0;
+        if (/^deposit$/i.test(type)) { perps = amt; total = amt; }
+        else if (/withdraw|^send$/i.test(type)) { perps = -amt; total = -amt; }
+        else if (/accountClassTransfer/i.test(type)) { perps = d.toPerp ? amt : -amt; total = 0; }
+        else if (/cStakingTransfer|spotTransfer/i.test(type)) { perps = 0; total = /cStaking/i.test(type) ? -amt : 0; }
+        return { t: num(r.time), type, usdc: amt, flowPerps: isNum(perps) ? perps : 0, flowTotal: isNum(total) ? total : 0, toPerp: d.toPerp, token: d.token };
+      })
       .filter((r) => isNum(r.t))
       .sort((a, b) => a.t - b.t);
+  }
+
+  function parseSpot(raw) {
+    // spotClearinghouseState => {balances:[{coin, token, total, hold, entryNtl}]}
+    const arr = Array.isArray(raw?.balances) ? raw.balances : [];
+    const balances = arr.map((b) => ({ coin: b.coin, total: num(b.total), hold: num(b.hold), entryNtl: num(b.entryNtl) })).filter((b) => b.coin && isNum(b.total) && b.total > 0);
+    const usdc = balances.find((b) => b.coin === "USDC")?.total ?? 0;
+    return { balances, usdc, otherEntryNtl: balances.filter((b) => b.coin !== "USDC").reduce((s, b) => s + (isNum(b.entryNtl) ? b.entryNtl : 0), 0), prov: arr.length ? PROV.LIVE : PROV.UNKNOWN };
   }
 
   function parseL2(raw, depth = 10) {
@@ -262,5 +298,5 @@
     return { ts: ts || Date.now(), wallet, account, positions, orders, meta, mids: mids || {}, predictedFunding: parsePredictedFundings(predicted), partial, raw: { state, metaAndCtxs, openOrders, predicted } };
   }
 
-  AOS.normalize = { mmRateFor, parseMeta, parseAccount, parsePositions, parseOrders, parsePredictedFundings, parseCandles, parseFundingHistory, parseFills, parseUserFunding, parsePortfolio, parseLedger, parseL2, buildSnapshot };
+  AOS.normalize = { mmRateFor, mmRateForNotional, parseSpot, parseMeta, parseAccount, parsePositions, parseOrders, parsePredictedFundings, parseCandles, parseFundingHistory, parseFills, parseUserFunding, parsePortfolio, parseLedger, parseL2, buildSnapshot };
 })(typeof window !== "undefined" ? window : globalThis);
