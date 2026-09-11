@@ -1,10 +1,9 @@
-# Deploys the static dashboard to GitHub Pages.
-# One-time setup: repository Settings → Pages → Source: "GitHub Actions".
-name: Deploy to GitHub Pages
+# GitHub Pages for this repository is configured to deploy from the `main` branch (Settings → Pages → Source: branch).
+# Nothing to do here on push: merging into `main` publishes the dashboard automatically.
+# This workflow only exists for the alternative setup (Settings → Pages → Source: "GitHub Actions") and runs on demand.
+name: Deploy to GitHub Pages (manual, Actions source only)
 
 on:
-  push:
-    branches: [main, "claude/personal-alpha-os-design-7t5ga4"]
   workflow_dispatch:
 
 permissions:
