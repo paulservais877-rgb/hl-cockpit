@@ -1,0 +1,980 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>HL Cockpit — BTC + ETH (PRO v5.0)</title>
+  <style>
+    :root{
+      --bg0:#06080b; --bg1:#0b1118;
+      --line:rgba(255,255,255,.08);
+      --text:#e8eef6; --muted:#9fb0c2;
+      --ok:#37d67a; --warn:#ffcc66; --bad:#ff5c7a;
+      --shadow:0 14px 40px rgba(0,0,0,.55); --radius:18px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; color:var(--text);
+      background:
+        radial-gradient(1200px 700px at 10% 0%, rgba(122,167,255,.12), transparent 55%),
+        radial-gradient(900px 600px at 85% 15%, rgba(55,214,122,.10), transparent 60%),
+        radial-gradient(900px 900px at 50% 120%, rgba(255,204,102,.08), transparent 60%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      letter-spacing:.2px;
+    }
+    body:before{
+      content:""; position:fixed; inset:0; pointer-events:none; opacity:.07;
+      background-image:
+        radial-gradient(circle at 25% 25%, rgba(255,255,255,.04) 0 1px, transparent 1px),
+        radial-gradient(circle at 75% 65%, rgba(255,255,255,.03) 0 1px, transparent 1px);
+      background-size: 36px 36px, 44px 44px;
+    }
+    .wrap{max-width:1100px;margin:0 auto;padding:22px 16px 40px}
+    header{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:10px 4px 18px}
+    h1{margin:0;font-size:26px;font-weight:750;line-height:1.1}
+    .sub{color:var(--muted);font-size:13px;line-height:1.35}
+    .top-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+    .btn{
+      appearance:none;border:1px solid var(--line);
+      background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      color:var(--text);padding:10px 14px;border-radius:14px;
+      font-weight:650;cursor:pointer;box-shadow:var(--shadow);
+      transition:transform .08s ease, border-color .15s ease, background .15s ease;
+      user-select:none;
+    }
+    .btn:active{transform:translateY(1px)}
+    .btn.primary{border-color:rgba(122,167,255,.35);background:linear-gradient(180deg, rgba(122,167,255,.22), rgba(122,167,255,.08))}
+    .btn.ghost{box-shadow:none;background:transparent}
+    .grid{display:grid;gap:14px;grid-template-columns:1fr}
+    @media (min-width:920px){.grid{grid-template-columns: 1.15fr .85fr;}}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border:1px solid var(--line);border-radius:var(--radius);padding:14px 14px;box-shadow:var(--shadow)}
+    .card h2{margin:0 0 10px 0;font-size:16px;font-weight:750;display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .badge{font-size:11px;font-weight:800;padding:4px 8px;border-radius:999px;border:1px solid var(--line);
+      color:var(--muted);background:rgba(255,255,255,.03);white-space:nowrap}
+    .badge.ok{color:#b7ffd2;border-color:rgba(55,214,122,.35);background:rgba(55,214,122,.10)}
+    .badge.warn{color:#ffe7b5;border-color:rgba(255,204,102,.35);background:rgba(255,204,102,.10)}
+    .badge.bad{color:#ffd0d9;border-color:rgba(255,92,122,.35);background:rgba(255,92,122,.10)}
+    .rows{display:flex;flex-direction:column;gap:10px}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 10px;border:1px solid rgba(255,255,255,.06);
+      border-radius:14px;background:rgba(0,0,0,.18)}
+    .k{color:var(--muted);font-size:12px}
+    .v{font-variant-numeric:tabular-nums;font-weight:750}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace}
+    input[type="text"]{width:100%;padding:11px 12px;border-radius:14px;border:1px solid rgba(255,255,255,.10);
+      background:rgba(0,0,0,.20);color:var(--text);outline:none;font-size:14px}
+    .note{color:var(--muted);font-size:12px;line-height:1.35}
+    .hr{height:1px;background:rgba(255,255,255,.08);margin:10px 0}
+    .control{display:flex;flex-direction:column;gap:6px}
+    .control label{font-size:12px;color:var(--muted);display:flex;justify-content:space-between}
+    input[type="range"]{width:100%}
+    .table{width:100%;border-collapse:separate;border-spacing:0 10px;font-variant-numeric:tabular-nums}
+    .table th{text-align:left;font-size:11px;color:var(--muted);font-weight:800;padding:0 10px 2px}
+    .table td{padding:10px 10px;border-top:1px solid rgba(255,255,255,.06);border-bottom:1px solid rgba(255,255,255,.06);
+      background:rgba(0,0,0,.18);font-size:13px}
+    .table tr td:first-child{border-left:1px solid rgba(255,255,255,.06);border-top-left-radius:14px;border-bottom-left-radius:14px}
+    .table tr td:last-child{border-right:1px solid rgba(255,255,255,.06);border-top-right-radius:14px;border-bottom-right-radius:14px;text-align:right}
+    .sideL{color:var(--ok);font-weight:850}
+    .sideS{color:var(--bad);font-weight:850}
+    .gauge{position:relative;height:12px;border-radius:999px;background:rgba(255,255,255,.08);
+      overflow:hidden;border:1px solid rgba(255,255,255,.08)}
+    .gauge > span{position:absolute;left:0;top:0;bottom:0;width:0%;
+      background:linear-gradient(90deg, rgba(255,92,122,.95), rgba(255,204,102,.95), rgba(55,214,122,.95));
+      border-radius:999px;transition:width .25s ease}
+    .coachBox{
+      border:1px solid rgba(255,255,255,.10);border-radius:14px;padding:12px;background:rgba(0,0,0,.16);
+      color:var(--muted);font-size:12.8px;line-height:1.35
+    }
+    .coachBox b{color:var(--text)}
+    details summary{cursor:pointer;color:var(--muted);font-weight:750}
+    pre{margin:10px 0 0;padding:12px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:rgba(0,0,0,.22);
+      overflow:auto;max-height:280px;font-size:11px;color:#dbe7ff}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>HL Cockpit — BTC + ETH <span class="badge">PRO v5.0</span></h1>
+      <div class="sub">
+        <b>Aucun appel réseau avant clic.</b> Sources HL: <span class="mono">clearinghouseState</span>, <span class="mono">allMids</span>, <span class="mono">openOrders</span>.
+        <br/>CMR ici = <b>Maintenance Margin / Account Value</b> (aligné UI HL).
+      </div>
+    </div>
+    <div class="top-actions">
+      <button id="btnConnect" class="btn primary">Connecter</button>
+      <button id="btnRefresh" class="btn">Rafraîchir</button>
+      <label class="btn ghost" style="display:inline-flex;align-items:center;gap:8px;box-shadow:none;cursor:default"><input id="auto" type="checkbox" style="transform:scale(1.1)"/><span style="font-weight:650">Auto 60s</span><span id="autoIn" class="mono" style="opacity:.7">—</span></label>
+      <button id="btnExport" class="btn">Exporter</button>
+      <button id="btnReport" class="btn">Rapport</button>
+      <button id="btnClear" class="btn ghost">Effacer cache</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Wallet <span id="apiBadge" class="badge">IDLE</span></h2>
+      <input id="wallet" type="text" spellcheck="false" class="mono"
+             value="0x35f0851EF6516c5706107b86dBe09A62A311ab07"/>
+      <div class="note" style="margin-top:8px">
+        iOS/Brave : si le clic ne fait rien, désactive <b>Shields</b> (icône lion) ou ouvre le fichier dans <b>Safari</b>.
+      </div>
+
+      <div class="hr"></div>
+
+      <h2>Survie (compte) <span id="survivalBadge" class="badge">—</span></h2>
+      <div class="rows">
+        <div class="row"><div class="k">Account Value (Equity)</div><div id="equity" class="v">—</div></div>
+        <div class="row"><div class="k">Margin Used</div><div id="marginUsed" class="v">—</div></div>
+        <div class="row"><div class="k">Maintenance Margin</div><div id="mm" class="v">—</div></div>
+        <div class="row"><div class="k">Buffer (Equity − MM)</div><div id="buffer" class="v">—</div></div>
+        <div class="row"><div class="k">CMR (MM / Equity)</div><div id="cmr" class="v">—</div></div>
+        <div class="control">
+          <label><span>Jauge Survie (buffer/equity)</span><span id="survivalPct" class="mono">—</span></label>
+          <div class="gauge"><span id="survivalBar"></span></div>
+          <div class="note">Vert = confortable · Jaune = vigilance · Rouge = danger</div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <h2>Stress tests (A2) <span class="badge">BTC -10 / -20 / -30</span></h2>
+      <div class="control">
+        <label><span>Corrélation ETH vs BTC</span><span id="corrVal" class="mono">1.20×</span></label>
+        <input id="corr" type="range" min="0.6" max="1.6" step="0.05" value="1.2" />
+      </div>
+      <table class="table">
+        <thead><tr><th>Scénario</th><th>Δ Equity (est.)</th><th>Buffer (est.)</th><th>Statut</th></tr></thead>
+        <tbody id="stressRows"></tbody>
+      </table>
+
+      <div class="hr"></div>
+
+      <h2>Positions <span class="badge">BTC/ETH + autres</span></h2>
+      <table class="table">
+        <thead><tr><th>Symbole</th><th>Side</th><th>Size</th><th>Entry</th><th>Mark</th><th>PnL</th><th>Dist. liq</th><th></th></tr></thead>
+        <tbody id="posRows"></tbody>
+      </table>
+
+      <div id="inlineDrawer" class="card" style="margin-top:12px;display:none;padding:12px 12px;border-radius:16px;box-shadow:none">
+        <h2 style="margin:0 0 8px 0;font-size:14px">Détails position <span id="dSym" class="badge">—</span></h2>
+        <div id="dRows" class="rows"></div>
+        <div style="height:10px"></div>
+        <div class="note"><b>Simulation TP/SL</b> (local) :</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+          <div style="flex:1;min-width:220px">
+            <div class="k">TP (prix)</div>
+            <input id="dTP" type="text" class="mono" placeholder="ex: 82000"/>
+          </div>
+          <div style="flex:1;min-width:220px">
+            <div class="k">SL (prix)</div>
+            <input id="dSL" type="text" class="mono" placeholder="ex: 70000"/>
+          </div>
+          <div style="flex:1;min-width:220px">
+            <div class="k">PnL estimé @TP/SL</div>
+            <div id="dPnL" class="row" style="margin-top:6px"><div class="k">—</div><div class="v">—</div></div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:10px">
+          <button id="dClose" class="btn ghost" style="box-shadow:none">Fermer</button>
+        </div>
+      </div>
+
+      
+      <div class="hr"></div>
+
+      <h2>Funding (HlPerp) <span class="badge">predictedFundings</span></h2>
+      <div class="note">
+        Taux affiché = <b>taux “8h”</b>. Hyperliquid paie la funding <b>toutes les heures</b> à <b>1/8</b> du taux 8h.
+        L'impact ci-dessous est une estimation “si le taux reste constant”.
+      </div>
+      <table class="table" style="margin-top:10px">
+        <thead><tr><th>Coin</th><th>Rate (8h)</th><th>Next</th><th>Notional</th><th>Impact /h</th><th>Impact /24h</th></tr></thead>
+        <tbody id="fundRows">
+          <tr><td colspan="6" class="note">Clique “Connecter” pour charger les fundings.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="hr"></div>
+
+      <h2>Ordres ouverts <span class="badge">openOrders</span></h2> <span class="badge">openOrders</span></h2> <span class="badge">openOrders</span></h2>
+      <table class="table">
+        <thead><tr><th>Coin</th><th>Type</th><th>Dir</th><th>Size</th><th>Limit</th><th>Trigger</th><th>Reduce</th></tr></thead>
+        <tbody id="ordRows">
+          <tr><td colspan="7" class="note">Clique “Connecter” pour charger les ordres.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="hr"></div>
+
+      <h2>Coaching risque (actionnable) <span id="coachBadge" class="badge">—</span></h2>
+      <div id="coach" class="coachBox">Connecte pour générer le coaching.</div>
+
+      <details style="margin-top:12px;">
+        <summary>Debug JSON (dernier snapshot)</summary>
+        <pre id="debug" class="mono">—</pre>
+      </details>
+    </div>
+
+    <div class="card">
+      <h2>Sources & Freshness <span class="badge">production-grade</span></h2>
+      <div class="rows">
+        <div class="row"><div class="k">hl_api</div><div id="hlStatus" class="v">IDLE</div></div>
+        <div class="row"><div class="k">calc_engine</div><div class="v">LOCAL</div></div>
+        <div class="row"><div class="k">Dernière synchro</div><div id="freshTs" class="v mono">—</div></div>
+        <div class="row"><div class="k">Auto refresh</div><div id="autoStatus" class="v mono">OFF</div></div>
+        <div class="row"><div class="k">Prochain refresh</div><div id="nextRefresh" class="v mono">—</div></div>
+        <div class="row"><div class="k">Mode dégradé</div><div id="degraded" class="v">—</div></div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="note">
+        • Remontée des ordres via <span class="mono">openOrders</span> (fait).<br/>
+        • Si un champ est “—”, HL ne renvoie pas ce champ dans ce mode (ex. liqPx selon margining).<br/>
+        • Si le bouton ne répond pas: erreur JS → ouvrir DevTools Console (sur Mac) ou reprendre ce fichier v3.1.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+
+  const CACHE_KEY = "hl_cockpit_snapshot_v50";
+  const saveCache = (o)=>{ try{ localStorage.setItem(CACHE_KEY, JSON.stringify(o)); }catch(e){} };
+  const loadCache = ()=>{ try{ const s=localStorage.getItem(CACHE_KEY); return s?JSON.parse(s):null; }catch(e){ return null; } };
+  const clearCache = ()=>{ try{ localStorage.removeItem(CACHE_KEY); }catch(e){} };
+
+  const safeNum = (v)=>{
+    const n = (typeof v==="string") ? Number(v) : (typeof v==="number" ? v : NaN);
+    return Number.isFinite(n) ? n : NaN;
+  };
+  const fmtUSD = (x)=> Number.isFinite(x) ? x.toLocaleString(undefined,{maximumFractionDigits:2})+" $" : "—";
+  const fmtPx  = (x)=> Number.isFinite(x) ? x.toLocaleString(undefined,{maximumFractionDigits:2}) : "—";
+  const fmtPct = (x)=> Number.isFinite(x) ? (x*100).toFixed(2)+"%" : "—";
+
+  function setBadge(el, kind, text){
+    el.classList.remove("ok","warn","bad");
+    if(kind) el.classList.add(kind);
+    el.textContent = text;
+  }
+
+  async function hlInfo(payload){
+    const res = await fetch("https://api.hyperliquid.xyz/info", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify(payload),
+      cache:"no-store"
+    });
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    return await res.json();
+  }
+
+  function extractAccount(state){
+    const cms = state?.crossMarginSummary || {};
+    const ms  = state?.marginSummary || {};
+    const equity = safeNum(cms.accountValue ?? ms.accountValue ?? state?.accountValue);
+    const marginUsed = safeNum(cms.totalMarginUsed ?? ms.totalMarginUsed ?? cms.marginUsed ?? ms.marginUsed);
+    const mm = safeNum(state?.crossMaintenanceMarginUsed ?? cms.maintenanceMarginUsed ?? ms.maintenanceMargin);
+    const buffer = (Number.isFinite(equity) && Number.isFinite(mm)) ? (equity - mm) : NaN;
+    const cmr = (Number.isFinite(equity) && equity>0 && Number.isFinite(mm)) ? (mm / equity) : NaN;
+    return {equity, marginUsed, mm, buffer, cmr};
+  }
+
+  function extractPositions(state, mids){
+    const out=[];
+    const ap = Array.isArray(state?.assetPositions) ? state.assetPositions : [];
+    for(const item of ap){
+      const p = item?.position || item;
+      const symbol = p?.coin || p?.symbol;
+      if(!symbol) continue;
+
+      const szi = safeNum(p?.szi ?? p?.size ?? p?.positionSize);
+      const entry = safeNum(p?.entryPx ?? p?.entry ?? p?.avgPx);
+      const liq = safeNum(p?.liqPx ?? p?.liq ?? p?.liquidationPx);
+      const mid = safeNum(mids?.[symbol]);
+      const mark = Number.isFinite(mid) ? mid : safeNum(p?.markPx ?? p?.mark);
+      const side = Number.isFinite(szi) ? (szi>=0 ? "LONG" : "SHORT") : "—";
+      const absSize = Number.isFinite(szi) ? Math.abs(szi) : NaN;
+
+      const pnlHL = safeNum(p?.unrealizedPnl ?? p?.upl ?? p?.unrealized_pnl);
+      const pnl = Number.isFinite(pnlHL) ? pnlHL : (Number.isFinite(szi)&&Number.isFinite(entry)&&Number.isFinite(mark) ? (szi*(mark-entry)) : NaN);
+
+      let dist=NaN;
+      if(Number.isFinite(mark) && mark>0 && Number.isFinite(liq)){
+        dist = (szi>=0) ? ((mark-liq)/mark) : ((liq-mark)/mark);
+      }
+      out.push({symbol, side, szi, absSize, entry, mark, liq, pnl, dist});
+    }
+    const prio = (s)=> s==="BTC"?0:(s==="ETH"?1:2);
+    out.sort((a,b)=>prio(a.symbol)-prio(b.symbol) || a.symbol.localeCompare(b.symbol));
+    return out;
+  }
+
+  function extractOrders(openOrders){
+    const arr = Array.isArray(openOrders) ? openOrders : (openOrders?.orders || openOrders?.openOrders || []);
+    const orders = [];
+    for(const o of arr){
+      if(!o) continue;
+      const coin = o.coin || o.symbol || o.asset || "—";
+      const isTrigger = (o.triggerPx !== undefined && o.triggerPx !== null) || (o.trigger && o.trigger.price);
+      const type = isTrigger ? "TRIGGER" : "LIMIT";
+      const dir = (o.side || o.dir || "").toString().toUpperCase() || "—";
+      const sz = safeNum(o.sz ?? o.size ?? o.orderSz);
+      const limitPx = safeNum(o.limitPx ?? o.px ?? o.price);
+      const trigPx = safeNum(o.triggerPx ?? o.trigger?.price);
+      const reduceOnly = (o.reduceOnly ?? o.ro ?? false) ? "Yes" : "No";
+      const typeLabel = (o.orderType && typeof o.orderType==="string") ? o.orderType : type;
+      orders.push({coin, type:typeLabel, dir, sz, limitPx, trigPx, reduceOnly});
+    }
+    orders.sort((a,b)=> (a.coin.localeCompare(b.coin)) );
+    return orders;
+  }
+
+  function extractFunding(predicted){
+    // predictedFundings response is: [ [ "BTC", [ [ "HlPerp", {fundingRate, nextFundingTime}], ... ] ], ... ]
+    const map = {};
+    if(!Array.isArray(predicted)) return map;
+    for(const entry of predicted){
+      const coin = entry?.[0];
+      const venues = entry?.[1];
+      if(!coin || !Array.isArray(venues)) continue;
+      for(const v of venues){
+        const venue = v?.[0];
+        const obj = v?.[1];
+        if(venue === "HlPerp" && obj){
+          const r = safeNum(obj.fundingRate);
+          const t = safeNum(obj.nextFundingTime);
+          map[coin] = { rate8h: r, nextFundingTime: t };
+        }
+      }
+    }
+    return map;
+  }
+
+  function renderFunding(snapshot){
+    const tbody = document.getElementById("fundRows");
+    if(!tbody) return;
+    const f = snapshot.funding || {};
+    const pos = snapshot.positions || [];
+
+    const fmtRate = (r)=> Number.isFinite(r) ? (r*100).toFixed(4)+"%" : "—";
+    const fmtTime = (ms)=> Number.isFinite(ms) ? new Date(ms).toLocaleString(undefined,{hour12:false}) : "—";
+    const fmtUSD = (x)=> Number.isFinite(x) ? x.toLocaleString(undefined,{maximumFractionDigits:2})+" $" : "—";
+    const fmtImpact = (x)=> Number.isFinite(x) ? ((x>=0?"+":"")+x.toLocaleString(undefined,{maximumFractionDigits:2})+" $") : "—";
+
+    tbody.innerHTML = "";
+    const coins = ["BTC","ETH", ...Object.keys(f).filter(c=>c!=="BTC"&&c!=="ETH")];
+
+    let any=false;
+    for(const coin of coins){
+      if(!(coin in f)) continue;
+      any=true;
+      const rate8h = f[coin].rate8h;
+      const nextT = f[coin].nextFundingTime;
+
+      const p = pos.find(x=>x.symbol===coin);
+      const notional = (p && Number.isFinite(p.absSize) && Number.isFinite(p.mark)) ? (p.absSize*p.mark) : NaN;
+
+      // Funding is based on 8h rate; paid hourly at 1/8.
+      // Sign convention: positive rate => longs pay shorts.
+      // Estimated hourly impact for THIS position:
+      // long: -notional * rate8h/8 ; short: +notional * rate8h/8
+      let impactH = NaN;
+      if(Number.isFinite(notional) && Number.isFinite(rate8h) && p){
+        const base = notional * (rate8h/8);
+        impactH = (p.side==="LONG") ? (-base) : (p.side==="SHORT" ? (base) : NaN);
+      }
+      const impactD = Number.isFinite(impactH) ? impactH*24 : NaN;
+
+      const tr=document.createElement("tr");
+      tr.innerHTML = `
+        <td class="mono">${coin}</td>
+        <td class="mono">${fmtRate(rate8h)}</td>
+        <td class="mono">${fmtTime(nextT)}</td>
+        <td class="mono">${fmtUSD(notional)}</td>
+        <td class="mono">${fmtImpact(impactH)}</td>
+        <td class="mono">${fmtImpact(impactD)}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    if(!any){
+      tbody.innerHTML = `<tr><td colspan="6" class="note">Funding indisponible (endpoint predictedFundings bloqué ou non supporté par la source).</td></tr>`;
+    }
+  }
+
+
+  function render(snapshot, degraded){
+    $("freshTs").textContent = new Date(snapshot.ts).toLocaleString(undefined,{hour12:false});
+    $("degraded").textContent = degraded ? "OUI (snapshot)" : "NON";
+    $("hlStatus").textContent = degraded ? "STALE" : "OK";
+    setBadge($("apiBadge"), degraded ? "warn" : "ok", degraded ? "STALE" : "OK");
+
+    const a = snapshot.account;
+    $("equity").textContent = fmtUSD(a.equity);
+    $("marginUsed").textContent = fmtUSD(a.marginUsed);
+    $("mm").textContent = fmtUSD(a.mm);
+    $("buffer").textContent = fmtUSD(a.buffer);
+    $("cmr").textContent = fmtPct(a.cmr);
+
+    let surv = NaN;
+    if(Number.isFinite(a.buffer) && Number.isFinite(a.equity) && a.equity>0) surv = a.buffer/a.equity;
+    $("survivalPct").textContent = fmtPct(surv);
+    const w = Number.isFinite(surv) ? Math.max(0, Math.min(1, surv))*100 : 0;
+    $("survivalBar").style.width = w.toFixed(1)+"%";
+    if(!Number.isFinite(surv)) setBadge($("survivalBadge"), null, "—");
+    else if(surv>=0.25) setBadge($("survivalBadge"), "ok", "CONFORT");
+    else if(surv>=0.10) setBadge($("survivalBadge"), "warn", "VIGILANCE");
+    else setBadge($("survivalBadge"), "bad", "DANGER");
+
+    // positions
+    const pr = $("posRows"); pr.innerHTML="";
+    if(!snapshot.positions.length){
+      pr.innerHTML = `<tr><td colspan="7" class="note">Aucune position.</td></tr>`;
+    }else{
+      for(const p of snapshot.positions){
+        const sideClass = p.side==="LONG" ? "sideL" : "sideS";
+        const distTxt = Number.isFinite(p.dist) ? (p.dist*100).toFixed(2)+"%" : "—";
+        const pnlTxt = Number.isFinite(p.pnl) ? p.pnl.toLocaleString(undefined,{maximumFractionDigits:2})+" $" : "—";
+        const tr=document.createElement("tr");
+        tr.innerHTML = `
+          <td class="mono">${p.symbol}</td>
+          <td class="${sideClass}">${p.side}</td>
+          <td class="mono">${Number.isFinite(p.absSize)?p.absSize.toFixed(6):"—"}</td>
+          <td class="mono">${fmtPx(p.entry)}</td>
+          <td class="mono">${fmtPx(p.mark)}</td>
+          <td class="mono">${pnlTxt}</td>
+          <td class="mono">${distTxt}</td>
+          <td><button class="btn ghost" style="padding:6px 10px;border-radius:12px;box-shadow:none" data-open="${p.symbol}">Détails</button></td>
+        `;
+        pr.appendChild(tr);
+      }
+    }
+
+    // orders
+    const orows = $("ordRows"); orows.innerHTML="";
+    if(!snapshot.orders.length){
+      orows.innerHTML = `<tr><td colspan="7" class="note">Aucun ordre ouvert (openOrders vide) ou accès restreint.</td></tr>`;
+    }else{
+      for(const o of snapshot.orders){
+        const tr=document.createElement("tr");
+        tr.innerHTML = `
+          <td class="mono">${o.coin}</td>
+          <td class="mono">${o.type}</td>
+          <td class="mono">${o.dir}</td>
+          <td class="mono">${Number.isFinite(o.sz)?o.sz.toFixed(6):"—"}</td>
+          <td class="mono">${fmtPx(o.limitPx)}</td>
+          <td class="mono">${fmtPx(o.trigPx)}</td>
+          <td class="mono">${o.reduceOnly}</td>
+        `;
+        orows.appendChild(tr);
+      }
+    }
+
+    renderStress(snapshot);
+    renderFunding(snapshot);
+    renderCoach(snapshot);
+    $("debug").textContent = JSON.stringify(snapshot.raw, null, 2);
+  }
+
+  function renderStress(snapshot){
+    const corr = safeNum($("corr").value);
+    $("corrVal").textContent = (Number.isFinite(corr)?corr.toFixed(2):"—")+"×";
+
+    const pos = snapshot.positions;
+    const acc = snapshot.account;
+    const equity0 = acc.equity;
+    const mm0 = acc.mm;
+
+    const get = (s)=>pos.find(p=>p.symbol===s) || null;
+    const btc = get("BTC");
+    const eth = get("ETH");
+
+    const sc = [-0.10, -0.20, -0.30];
+    const tbody=$("stressRows"); tbody.innerHTML="";
+    for(const s of sc){
+      const btc1 = Number.isFinite(btc?.mark) ? btc.mark*(1+s) : NaN;
+      const ethMove = Number.isFinite(corr) ? s*corr : s;
+      const eth1 = Number.isFinite(eth?.mark) ? eth.mark*(1+ethMove) : NaN;
+
+      const pnlDeltaFor = (p, m1)=>{
+        if(!p) return 0;
+        if(!Number.isFinite(p.szi) || !Number.isFinite(p.entry) || !Number.isFinite(m1) || !Number.isFinite(p.mark)) return 0;
+        const pnl0 = p.szi*(p.mark - p.entry);
+        const pnl1 = p.szi*(m1 - p.entry);
+        return pnl1 - pnl0;
+      };
+
+      let dP = 0;
+      dP += pnlDeltaFor(btc, btc1);
+      dP += pnlDeltaFor(eth, eth1);
+
+      const equity1 = Number.isFinite(equity0) ? (equity0 + dP) : NaN;
+      const buffer1 = (Number.isFinite(equity1) && Number.isFinite(mm0)) ? (equity1 - mm0) : NaN;
+
+      let status="—", kind=null;
+      if(Number.isFinite(equity1) && equity1>0 && Number.isFinite(buffer1)){
+        const surv = buffer1/equity1;
+        if(surv>=0.25){kind="ok";status="OK";}
+        else if(surv>=0.10){kind="warn";status="VIGIL";}
+        else {kind="bad";status="DANGER";}
+      }
+
+      const tr=document.createElement("tr");
+      tr.innerHTML = `
+        <td class="mono">BTC ${(s*100).toFixed(0)}%</td>
+        <td class="mono">${Number.isFinite(dP)?(dP>=0?"+":"")+dP.toLocaleString(undefined,{maximumFractionDigits:0})+" $":"—"}</td>
+        <td class="mono">${fmtUSD(buffer1)}</td>
+        <td>${kind?`<span class="badge ${kind}">${status}</span>`:`<span class="badge">${status}</span>`}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+
+  function renderCoach(snapshot){
+    const acc = snapshot.account;
+    const pos = snapshot.positions;
+
+    let worst=null;
+    for(const p of pos){
+      if(!Number.isFinite(p.dist)) continue;
+      if(!worst || p.dist < worst.dist) worst=p;
+    }
+
+    const lines=[];
+    let badgeKind=null, badgeText="—";
+
+    let surv=NaN;
+    if(Number.isFinite(acc.buffer)&&Number.isFinite(acc.equity)&&acc.equity>0) surv = acc.buffer/acc.equity;
+
+    if(Number.isFinite(surv)){
+      if(surv>=0.25){
+        badgeKind="ok"; badgeText="CONFORT";
+        lines.push("Buffer confortable : évite d’augmenter le levier sans plan de sortie.");
+      } else if(surv>=0.10){
+        badgeKind="warn"; badgeText="VIGILANCE";
+        lines.push("Zone vigilance : privilégie la stabilisation (réduction notional / hedge propre) plutôt que renforcer.");
+      } else {
+        badgeKind="bad"; badgeText="DANGER";
+        lines.push("Zone danger : priorité = éloigner la liquidation (réduire taille, remonter buffer, hedge).");
+      }
+    } else {
+      lines.push("Données insuffisantes pour un coaching complet (buffer/equity ou MM non dispo).");
+    }
+
+    if(Number.isFinite(acc.cmr)){
+      lines.push(`CMR (MM/Equity) ≈ ${(acc.cmr*100).toFixed(2)}% (aligné UI HL).`);
+    }
+
+    if(worst){
+      lines.push(`Worst‑of dist. liq: ${worst.symbol} ≈ ${(worst.dist*100).toFixed(2)}%.`);
+      if(worst.dist < 0.10){
+        lines.push("Action typique: réduire la jambe la plus risquée OU augmenter la marge (cash) pour remonter le buffer.");
+      }
+    } else {
+      lines.push("Distance liquidation indisponible (liqPx non renvoyé pour certaines positions/modes).");
+    }
+
+    lines.push("Règle: ne décide jamais sur un seul chiffre — combine buffer, dist. liq et stress -20%.");
+
+    setBadge($("coachBadge"), badgeKind, badgeText);
+    $("coach").innerHTML = "• " + lines.map(s=>String(s).replace(/</g,"&lt;")).join("<br/>• ");
+  }
+
+  async function connect(){
+    const wallet = $("wallet").value.trim();
+    if(!wallet || wallet.length < 10){ alert("Wallet invalide."); return; }
+
+    $("btnConnect").disabled = true;
+    $("btnConnect").textContent = "Connexion…";
+    setBadge($("apiBadge"), "warn", "FETCH");
+    $("hlStatus").textContent = "FETCH";
+
+    let degraded=false;
+    try{
+      const [state, mids, openOrders, predicted] = await Promise.all([
+        hlInfo({type:"clearinghouseState", user: wallet}),
+        hlInfo({type:"allMids"}).catch(()=>({})),
+        hlInfo({type:"openOrders", user: wallet}).catch(()=>({})),
+        hlInfo({type:"predictedFundings"}).catch(()=>null)
+      ]);
+
+      const account = extractAccount(state);
+      const positions = extractPositions(state, mids);
+      const orders = extractOrders(openOrders);
+
+      const funding = extractFunding(predicted);
+
+      const snapshot = { ts: Date.now(), wallet, account, positions, orders, funding, raw: { state, mids, openOrders, predicted } };
+      saveCache(snapshot);
+      render(snapshot, false);
+      $("degraded").textContent = "NON";
+      $("hlStatus").textContent = "OK";
+      setBadge($("apiBadge"), "ok", "OK");
+    }catch(e){
+      degraded=true;
+      const cached = loadCache();
+      if(cached){
+        render(cached, true);
+        $("hlStatus").textContent = "STALE";
+        $("degraded").textContent = "OUI (snapshot)";
+      }else{
+        $("coach").textContent = "Erreur API et pas de cache.";
+        $("debug").textContent = String(e?.message || e);
+        setBadge($("apiBadge"), "bad", "ERROR");
+        $("hlStatus").textContent = "ERROR";
+        $("degraded").textContent = "OUI (sans cache)";
+      }
+    }finally{
+      $("btnConnect").disabled = false;
+      $("btnConnect").textContent = "Connecter";
+      if(degraded) setBadge($("apiBadge"), "warn", "STALE");
+    }
+  }
+
+  $("btnConnect").addEventListener("click", connect);
+  $("btnClear").addEventListener("click", ()=>{ clearCache(); alert("Cache supprimé."); });
+  $("corr").addEventListener("input", ()=>{
+    const cached = loadCache();
+    if(cached) renderStress(cached);
+  });
+
+  
+  // --- v4 additions: refresh / auto-refresh / export / report / drawer ---
+  const btnRefresh = $("btnRefresh");
+  const btnExport  = $("btnExport");
+  const btnReport  = $("btnReport");
+  const autoEl     = $("auto");
+
+  let timer = null;
+
+  function toCSV(rows, headers){
+    const esc = (v)=>(''+(v??'')).replace(/"/g,'""');
+    const lines = [];
+    lines.push(headers.map(h=>`"${esc(h)}"`).join(","));
+    for(const r of rows){
+      lines.push(headers.map(h=>`"${esc(r[h])}"`).join(","));
+    }
+    return lines.join("\n");
+  }
+
+  function download(filename, content, mime){
+    const blob = new Blob([content], {type: mime || "text/plain;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+  }
+
+  function exportAll(){
+    const snap = loadCache();
+    if(!snap){ alert("Aucun snapshot à exporter. Clique d'abord « Connecter »."); return; }
+
+    // snapshot JSON
+    download("hl_snapshot.json", JSON.stringify(snap, null, 2), "application/json;charset=utf-8");
+
+    // positions CSV
+    const pos = (snap.positions||[]).map(p=>({
+      symbol:p.symbol, side:p.side, size:p.absSize, entry:p.entry, mark:p.mark, pnl:p.pnl, dist_liq_pct:p.dist
+    }));
+    download("hl_positions.csv", toCSV(pos, ["symbol","side","size","entry","mark","pnl","dist_liq_pct"]), "text/csv;charset=utf-8");
+
+    // orders CSV
+    const ord = (snap.orders||[]).map(o=>({
+      coin:o.coin, type:o.type, dir:o.dir, size:o.sz, limit:o.limitPx, trigger:o.trigPx, reduce:o.reduceOnly
+    }));
+    download("hl_orders.csv", toCSV(ord, ["coin","type","dir","size","limit","trigger","reduce"]), "text/csv;charset=utf-8");
+  }
+
+  function openReport(){
+    const snap = loadCache();
+    if(!snap){ alert("Aucun snapshot. Clique d'abord « Connecter »."); return; }
+    const a = snap.account || {};
+    const pos = snap.positions || [];
+    const ord = snap.orders || [];
+    const ts = new Date(snap.ts).toLocaleString(undefined,{hour12:false});
+
+    const posRows = pos.map(p=>`
+      <tr>
+        <td>${p.symbol}</td><td>${p.side}</td><td>${(p.absSize??"—")}</td>
+        <td>${(p.entry??"—")}</td><td>${(p.mark??"—")}</td><td>${(p.pnl??"—")}</td><td>${(p.dist??"—")}</td>
+      </tr>`).join("");
+
+    const ordRows = ord.map(o=>`
+      <tr>
+        <td>${o.coin}</td><td>${o.type}</td><td>${o.dir}</td><td>${(o.sz??"—")}</td>
+        <td>${(o.limitPx??"—")}</td><td>${(o.trigPx??"—")}</td><td>${o.reduceOnly}</td>
+      </tr>`).join("");
+
+    const html = `<!doctype html><html><head><meta charset="utf-8"/><title>HL Report</title>
+    <style>body{font-family:Arial;padding:24px}h1{margin:0 0 6px}table{border-collapse:collapse;width:100%;margin:12px 0}th,td{border:1px solid #ddd;padding:8px;font-size:12px}th{background:#f6f6f6;text-align:left}</style>
+    </head><body>
+    <h1>HL Cockpit — Report</h1>
+    <div>Wallet: <code>${snap.wallet}</code></div>
+    <div>Timestamp: ${ts}</div>
+    <h2>Compte</h2>
+    <ul>
+      <li>Equity: ${Number.isFinite(a.equity)?(a.equity.toFixed(2)+' $'):(a.equity ?? '—')}</li>
+      <li>Margin Used: ${Number.isFinite(a.marginUsed)?(a.marginUsed.toFixed(2)+' $'):(a.marginUsed ?? '—')}</li>
+      <li>Maintenance Margin: ${Number.isFinite(a.mm)?(a.mm.toFixed(2)+' $'):(a.mm ?? '—')}</li>
+      <li>CMR: ${Number.isFinite(a.cmr)?((a.cmr*100).toFixed(2)+'%'):(a.cmr ?? '—')}</li>
+    </ul>
+    <h2>Positions</h2>
+    <table><thead><tr><th>Symbol</th><th>Side</th><th>Size</th><th>Entry</th><th>Mark</th><th>PnL</th><th>Dist liq</th></tr></thead>
+    <tbody>${posRows || "<tr><td colspan='7'>—</td></tr>"}</tbody></table>
+    <h2>Ordres ouverts</h2>
+    <table><thead><tr><th>Coin</th><th>Type</th><th>Dir</th><th>Size</th><th>Limit</th><th>Trigger</th><th>Reduce</th></tr></thead>
+    <tbody>${ordRows || "<tr><td colspan='7'>—</td></tr>"}</tbody></table>
+    </body></html>`;
+    const w = window.open("", "_blank");
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  }
+
+  
+  let tickTimer = null;
+  let secondsLeft = 0;
+
+  function updateAutoUI(){
+    const on = autoEl && autoEl.checked;
+    const st = document.getElementById("autoStatus");
+    const nr = document.getElementById("nextRefresh");
+    const ai = document.getElementById("autoIn");
+    if(st) st.textContent = on ? "ON" : "OFF";
+    if(on){
+      const t = secondsLeft;
+      const mm = String(Math.floor(t/60)).padStart(2,"0");
+      const ss = String(t%60).padStart(2,"0");
+      if(nr) nr.textContent = mm+":"+ss;
+      if(ai) ai.textContent = mm+":"+ss;
+    }else{
+      if(nr) nr.textContent = "—";
+      if(ai) ai.textContent = "—";
+    }
+  }
+
+  function startCountdown(){
+    if(tickTimer){ clearInterval(tickTimer); tickTimer=null; }
+    secondsLeft = 60;
+    updateAutoUI();
+    tickTimer = setInterval(()=>{
+      if(!(autoEl && autoEl.checked)){ clearInterval(tickTimer); tickTimer=null; updateAutoUI(); return; }
+      secondsLeft -= 1;
+      if(secondsLeft <= 0){
+        secondsLeft = 60;
+        connect(); // actual refresh
+      }
+      updateAutoUI();
+    }, 1000);
+  }
+
+  function applyAuto(){
+    if(timer){ clearInterval(timer); timer=null; }
+    if(tickTimer){ clearInterval(tickTimer); tickTimer=null; }
+    if(autoEl && autoEl.checked){
+      // kick a countdown that triggers connect every 60s
+      startCountdown();
+    }else{
+      updateAutoUI();
+    }
+  }
+
+
+  // Pause auto-refresh when tab hidden
+  document.addEventListener("visibilitychange", ()=>{
+    if(document.hidden){
+      if(timer){ clearInterval(timer); timer=null; }
+    }else{
+      applyAuto();
+    }
+  });
+
+  if(btnRefresh) btnRefresh.addEventListener("click", ()=>connect());
+  if(btnExport) btnExport.addEventListener("click", exportAll);
+  if(btnReport) btnReport.addEventListener("click", openReport);
+  if(autoEl) autoEl.addEventListener("change", applyAuto);
+  // init auto UI
+  try{ updateAutoUI(); }catch(e){}
+
+  // Drawer / modal for positions
+  const overlay = document.getElementById("modalOverlay");
+  const mClose = document.getElementById("mClose");
+  const mTitle = document.getElementById("mTitle");
+  const mSub   = document.getElementById("mSub");
+  const mBody  = document.getElementById("mBody");
+  const tpEl   = document.getElementById("tp");
+  const slEl   = document.getElementById("sl");
+  const tpSlPnl= document.getElementById("tpSlPnl");
+
+  function showModal(){ overlay.style.display="flex"; }
+  function hideModal(){ overlay.style.display="none"; }
+
+  if(mClose) mClose.addEventListener("click", hideModal);
+  if(overlay) overlay.addEventListener("click", (e)=>{ if(e.target===overlay) hideModal(); });
+
+  function modalRow(k,v){
+    const d=document.createElement("div");
+    d.className="row";
+    d.innerHTML = `<div class="k">${k}</div><div class="v mono">${v}</div>`;
+    return d;
+  }
+
+  
+  function openPosition(symbol){
+    const snap = loadCache();
+    if(!snap){ alert("Aucun snapshot. Clique d'abord « Connecter »."); return; }
+    const p = (snap.positions||[]).find(x=>x.symbol===symbol);
+    if(!p){ alert("Position introuvable: "+symbol); return; }
+
+    // ---- Inline drawer (always available) ----
+    const inline = document.getElementById("inlineDrawer");
+    const dSym = document.getElementById("dSym");
+    const dRows = document.getElementById("dRows");
+    const dTP = document.getElementById("dTP");
+    const dSL = document.getElementById("dSL");
+    const dPnL = document.getElementById("dPnL");
+    const dClose = document.getElementById("dClose");
+
+    function row(k,v){
+      const div=document.createElement("div");
+      div.className="row";
+      div.innerHTML = `<div class="k">${k}</div><div class="v mono">${v}</div>`;
+      return div;
+    }
+
+    if(inline && dRows){
+      dSym.textContent = symbol;
+      dRows.innerHTML = "";
+      dRows.appendChild(row("Side", p.side));
+      dRows.appendChild(row("Size (abs)", p.absSize ?? "—"));
+      dRows.appendChild(row("Entry", p.entry ?? "—"));
+      dRows.appendChild(row("Mark", p.mark ?? "—"));
+      dRows.appendChild(row("PnL", p.pnl ?? "—"));
+      dRows.appendChild(row("Liq", p.liq ?? "—"));
+      dRows.appendChild(row("Dist liq", p.dist ?? "—"));
+
+      const szi = (p.szi ?? (p.side==="LONG" ? p.absSize : -p.absSize));
+      const entry = Number(p.entry);
+
+      const recalc = ()=>{
+        const tp = Number(dTP.value);
+        const sl = Number(dSL.value);
+        const ok = Number.isFinite(entry) && Number.isFinite(szi);
+        const tpP = (ok && Number.isFinite(tp)) ? (szi*(tp-entry)) : NaN;
+        const slP = (ok && Number.isFinite(sl)) ? (szi*(sl-entry)) : NaN;
+        dPnL.innerHTML = `<div class="k">TP PnL / SL PnL</div><div class="v mono">${Number.isFinite(tpP)?tpP.toFixed(2)+" $":"—"} / ${Number.isFinite(slP)?slP.toFixed(2)+" $":"—"}</div>`;
+      };
+      dTP.value=""; dSL.value="";
+      dTP.oninput = recalc; dSL.oninput = recalc;
+      recalc();
+
+      inline.style.display = "block";
+      if(dClose) dClose.onclick = ()=>{ inline.style.display="none"; };
+      inline.scrollIntoView({behavior:"smooth", block:"nearest"});
+    }
+
+    // ---- Modal overlay (best effort) ----
+    if(overlay && mTitle && mSub && mBody){
+      mTitle.textContent = `Détails — ${symbol}`;
+      mSub.textContent = `Side ${p.side} · Size ${p.absSize ?? "—"} · Entry ${p.entry ?? "—"} · Mark ${p.mark ?? "—"}`;
+      mBody.innerHTML = "";
+      mBody.appendChild(modalRow("Side", p.side));
+      mBody.appendChild(modalRow("Size (abs)", p.absSize ?? "—"));
+      mBody.appendChild(modalRow("Entry", p.entry ?? "—"));
+      mBody.appendChild(modalRow("Mark", p.mark ?? "—"));
+      mBody.appendChild(modalRow("PnL", p.pnl ?? "—"));
+      mBody.appendChild(modalRow("Liq", p.liq ?? "—"));
+      mBody.appendChild(modalRow("Dist liq", p.dist ?? "—"));
+      showModal();
+    }
+  }
+
+  // Click handlers (robust): event delegation (no need to patch render)
+  const posTbody = document.getElementById("posRows");
+  if(posTbody){
+    posTbody.addEventListener("click", (e)=>{
+      const tr = e.target.closest("tr");
+      if(!tr) return;
+      const td = tr.querySelector("td");
+      if(!td) return;
+      const sym = td.textContent.trim();
+      if(!sym || sym === "Aucune position." || sym === "—") return;
+      openPosition(sym);
+    });
+    // Details button
+    posTbody.addEventListener("click", (e)=>{
+      const btn = e.target.closest("button[data-open]");
+      if(!btn) return;
+      e.stopPropagation();
+      const sym = btn.getAttribute("data-open");
+      openPosition(sym);
+    });
+    posTbody.addEventListener("mouseover", (e)=>{
+      const tr = e.target.closest("tr");
+      if(tr) tr.style.cursor = "pointer";
+    });
+  }
+
+// boot
+  const cached = loadCache();
+  if(cached){
+    $("wallet").value = cached.wallet || $("wallet").value;
+    render(cached, true);
+    $("hlStatus").textContent = "STALE";
+    $("degraded").textContent = "OUI (snapshot)";
+    setBadge($("apiBadge"), "warn", "STALE");
+  }else{
+    $("hlStatus").textContent = "IDLE";
+    $("degraded").textContent = "—";
+  }
+})();
+</script>
+
+<div id="modalOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);z-index:9999;align-items:flex-end;justify-content:center;padding:18px">
+  <div id="modal" style="width:min(980px,100%);max-height:88vh;overflow:auto;border:1px solid rgba(255,255,255,.10);border-radius:18px;background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));box-shadow:0 22px 70px rgba(0,0,0,.65)">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 14px;border-bottom:1px solid rgba(255,255,255,.08)">
+      <div>
+        <div id="mTitle" style="font-weight:850">Détails position</div>
+        <div id="mSub" style="color:rgba(231,238,249,.7);font-size:12px;margin-top:2px">—</div>
+      </div>
+      <button id="mClose" class="btn ghost" style="box-shadow:none">Fermer</button>
+    </div>
+    <div style="padding:14px 14px">
+      <div id="mBody" class="rows"></div>
+      <div style="height:10px"></div>
+      <div class="note">
+        <b>Simulation TP/SL</b> (local, n'envoie rien à Hyperliquid) :
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+        <div style="flex:1;min-width:220px">
+          <div class="k">TP (prix)</div>
+          <input id="tp" type="text" class="mono" placeholder="ex: 82000"/>
+        </div>
+        <div style="flex:1;min-width:220px">
+          <div class="k">SL (prix)</div>
+          <input id="sl" type="text" class="mono" placeholder="ex: 70000"/>
+        </div>
+        <div style="flex:1;min-width:220px">
+          <div class="k">PnL estimé @TP/SL</div>
+          <div id="tpSlPnl" class="row" style="margin-top:6px"><div class="k">—</div><div class="v">—</div></div>
+        </div>
+      </div>
+      <div class="note" style="margin-top:10px">
+        Objectif : te donner une lecture “risk desk” et une simulation rapide. Pour exécuter un ordre, reste dans l'UI Hyperliquid.
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
