@@ -48,6 +48,7 @@
     useWebSocket: true,
     privacy: false,
     autoSync: true,
+    unifiedAccount: true, // Hyperliquid unified account: spot + staking back the perps (collateral = whole account)
     watcher: { enabled: false, startHour: 7.5, endHour: 20.5, everyHours: 2 },
     // Capital firewall — stored LOCALLY only, never committed. Empty = unknown.
     firewall: { coreCapital: NaN, investmentCapital: NaN, tradingCapital: NaN, tactical: NaN, lastVerified: null, monthlyObligations: NaN },

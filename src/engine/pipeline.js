@@ -6,14 +6,40 @@
   const AOS = (root.AOS = root.AOS || {});
   const { isNum } = AOS.util;
 
+  /** Unified account (Hyperliquid): spot + staking back the perps. Collateral = whole account value, not perps equity alone.
+      The `portfolio` endpoint exposes both series; the non-perps part moves slowly, so unified equity ≈ perps equity now + (total − perps) at the last point. */
+  function applyUnified(snapshot, history, settings) {
+    const acc = snapshot?.account;
+    if (!acc) return;
+    const base = isNum(acc.equityPerps) ? acc.equityPerps : acc.equity; // idempotent across re-runs on the same snapshot
+    acc.equityPerps = base;
+    const pf = history?.portfolio;
+    const last = (k) => { const s = pf?.[k]?.accountValue; return s?.length ? s[s.length - 1] : null; };
+    const tot = last("day"), per = last("perpDay");
+    const other = tot && per ? tot[1] - per[1] : NaN;
+    const on = settings?.unifiedAccount !== false && isNum(other) && other > 0;
+    acc.unified = { on, other: isNum(other) ? other : NaN, prov: isNum(other) ? "ESTIMATED" : "UNKNOWN", asOf: tot ? tot[0] : NaN };
+    acc.equity = on ? base + other : base;
+    const eq = acc.equity;
+    acc.buffer = isNum(eq) && isNum(acc.mm) ? eq - acc.mm : NaN;
+    acc.bufferRatio = isNum(eq) && eq > 0 && isNum(acc.mm) ? (eq - acc.mm) / eq : NaN;
+    acc.marginRatio = isNum(eq) && eq > 0 && isNum(acc.mm) ? acc.mm / eq : NaN;
+    acc.marginUtilisation = isNum(eq) && eq > 0 && isNum(acc.marginUsed) ? acc.marginUsed / eq : NaN;
+    acc.availableMargin = isNum(eq) && isNum(acc.marginUsed) ? eq - acc.marginUsed : NaN;
+    acc.effectiveLeverage = isNum(eq) && eq > 0 && isNum(acc.totalNtl) ? acc.totalNtl / eq : NaN;
+    if (acc.prov) acc.prov.equity = on ? "ESTIMATED" : "LIVE";
+  }
+
   function run(snapshot, history, settings, prev = null, { persist = true } = {}) {
     const t0 = Date.now();
     const timings = {};
     const lap = (k) => { timings[k] = Date.now() - t0; };
+    applyUnified(snapshot, history, settings);
     // Hyperliquid returns liquidationPx = null when the asset alone cannot liquidate the cross account (price would be ≤ 0).
     // Fill in the model value (CALCULATED) or flag "no liquidation from this asset alone".
     const model0 = AOS.risk.marginModel(snapshot.positions || [], snapshot.account || {});
     for (const p of snapshot.positions || []) {
+      if (p.prov?.liq === "CALCULATED") { p.liq = NaN; p.liqDist = NaN; p.noLiqAlone = false; } // recompute on re-runs (equity may have changed)
       if (isNum(p.liq) || !isNum(p.mark) || p.marginMode === "isolated") continue;
       const lp = AOS.simulate.liqPriceFor(p, snapshot.positions, snapshot.account, model0);
       if (!isNum(lp)) continue;
@@ -67,5 +93,5 @@
     return analysis;
   }
 
-  AOS.pipeline = { run };
+  AOS.pipeline = { run, applyUnified };
 })(typeof window !== "undefined" ? window : globalThis);

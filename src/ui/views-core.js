@@ -20,9 +20,10 @@
     set($("#cmd-tiles"), html`
       <div class="card"><h3>Mon compte ${prov(acc.prov?.equity)}</h3>
         <div class="big" data-private>${fmt.usd(acc.equity)}</div>
-        <div class="sub2">Aujourd'hui ${usdS(dayPnl)} · latent ${usdS(upnl)}</div>
-        ${isNum(a.alpha?.capital?.totalHL) ? kv("Compte HL total", usd(a.alpha.capital.totalHL), { prov: a.alpha.capital.prov }) : ""}
-        ${kv("Marge disponible", usd(acc.withdrawable))}
+        <div class="sub2">${acc.unified?.on ? "compte unifié · " : ""}aujourd'hui ${usdS(dayPnl)} · latent ${usdS(upnl)}</div>
+        ${acc.unified?.on ? kv("dont perps · spot & staking", raw(`<span data-private>${esc(fmt.usd(acc.equityPerps))} · ${esc(fmt.usd(acc.unified.other))}</span>`), { prov: acc.unified.prov }) : isNum(a.alpha?.capital?.totalHL) ? kv("Compte HL total", usd(a.alpha.capital.totalHL), { prov: a.alpha.capital.prov }) : ""}
+        ${kv("Ratio de maintenance", pct(acc.marginRatio, 2), { prov: "CALCULATED" })}
+        ${kv("Retirable (perps)", usd(acc.withdrawable))}
         ${more("Détails", raw(`${kv("Marge utilisée", pct(acc.marginUtilisation, 0)).s}${kv("Funding par jour", usdS(rk.fundingPerDay), { prov: "CALCULATED" }).s}${kv("Levier brut · net", `${fmt.x(pf.grossLev)} · ${fmt.x(pf.netLev, 1)} ${pf.directional === "NET LONG" ? "acheteur" : pf.directional === "NET SHORT" ? "vendeur" : "neutre"}`).s}${kv("Coussin (equity − maintenance)", pct(acc.bufferRatio, 0)).s}`))}
       </div>
       <div class="card"><span class="stripe ${esc(rk.level)}"></span><h3>Risque ${lvlTag(rk.level)}</h3>

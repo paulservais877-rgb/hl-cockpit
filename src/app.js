@@ -135,7 +135,7 @@
       const n = (id) => { const v = Number(g(id).replace(",", ".")); return Number.isFinite(v) && g(id) !== "" ? v : NaN; };
       const wallet = g("#s-wallet");
       store.saveSettings({
-        pollMs: Math.max(10, n("#s-poll") || 30) * 1000, staleAfterMs: Math.max(30, n("#s-stale") || 90) * 1000, useWebSocket: g("#s-ws") === "1", autoSync: g("#s-auto") === "1",
+        pollMs: Math.max(10, n("#s-poll") || 30) * 1000, staleAfterMs: Math.max(30, n("#s-stale") || 90) * 1000, useWebSocket: g("#s-ws") === "1", autoSync: g("#s-auto") === "1", unifiedAccount: g("#s-unified") === "1",
         watchlist: g("#s-watch").toUpperCase().split(/[\s,]+/).filter(Boolean), watcher: { enabled: g("#s-w-on") === "1", startHour: n("#s-w-start") || 7.5, endHour: n("#s-w-end") || 20.5, everyHours: 2 },
         firewall: { coreCapital: n("#s-fw-core"), investmentCapital: n("#s-fw-inv"), tradingCapital: n("#s-fw-trade"), tactical: n("#s-fw-tact"), monthlyObligations: n("#s-fw-obl"), lastVerified: g("#s-fw-date") || null },
         risk: { baseRiskPerTrade: n("#s-r-base") || 0.01, maxRiskPerTrade: n("#s-r-max") || 0.02, minLiqDistance: n("#s-r-liq") || 0.15, minBufferRatio: n("#s-r-buf") || 0.25, maxConcentration: n("#s-r-conc") || 0.6, normalCorrStress: n("#s-r-corr") || 0.95 },

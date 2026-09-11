@@ -166,7 +166,10 @@ t("decisions recorded (cards)", AOS.store.list("decisions").length === analysis.
 t("alerts array", Array.isArray(analysis.alerts));
 t("no NaN conviction", Object.values(analysis.orchestration.convictions).every((c) => isNum(c.score)));
 // veto propagates through gates
-const vetoAnalysis = AOS.pipeline.run(badSnap, history, AOS.store.settings, null, { persist: false });
+const vetoAnalysis = AOS.pipeline.run(badSnap, history, { ...AOS.store.settings, unifiedAccount: false }, null, { persist: false });
+t("unified account: equity = perps + rest of account", near(analysis.snapshot.account.equity, 21850 + 6000, 1) && near(analysis.snapshot.account.equityPerps, 21850, 1e-6) && analysis.snapshot.account.unified.on === true, JSON.stringify(analysis.snapshot.account.unified));
+t("unified account idempotent on re-run", near(AOS.pipeline.run(snap, history, AOS.store.settings, analysis, { persist: false }).snapshot.account.equity, 27850, 1));
+t("unified off keeps perps equity", near(AOS.pipeline.run(JSON.parse(JSON.stringify({ ...snap, raw: {} })), history, { ...AOS.store.settings, unifiedAccount: false }, null, { persist: false }).snapshot.account.equity, 21850, 1));
 t("veto → no approved cards", vetoAnalysis.orchestration.approved.length === 0);
 t("veto → action is RISK", vetoAnalysis.orchestration.action.kind === "RISK", vetoAnalysis.orchestration.action.kind);
 // second run produces alerts diff without crash & respects throttle

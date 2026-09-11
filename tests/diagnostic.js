@@ -54,6 +54,12 @@ async function call(label, payload) {
   r.c1d = await call("candleSnapshot BTC 1d (2 bars)", { type: "candleSnapshot", req: { coin: "BTC", interval: "1d", startTime: now - 2 * D, endTime: now } });
   r.fh = await call("fundingHistory BTC (3h)", { type: "fundingHistory", coin: "BTC", startTime: now - 3 * 3600e3, endTime: now });
   r.l2 = await call("l2Book BTC", { type: "l2Book", coin: "BTC" });
+  r.spot = await call("spotClearinghouseState", { type: "spotClearinghouseState", user: wallet });
+  // exploratory: unified-account fields (keys only, to learn the API shape)
+  for (const type of ["webData2", "userState", "unifiedAccountState", "delegatorSummary", "userVaultEquities"]) {
+    const x = await call(type + " (exploratoire, clés seulement)", { type, user: wallet });
+    if (x.json && typeof x.json === "object") console.log("   keys:", Array.isArray(x.json) ? "[array " + x.json.length + "]" : Object.keys(x.json).join(", "));
+  }
 
   // ---- normalizer check --------------------------------------------------------------------------
   console.log("\n\n===== NORMALIZER =====");
