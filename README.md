@@ -26,7 +26,7 @@ src/core              util (stats, formats, provenance), store (état, persistan
 src/data              hl-rest, hl-ws, normalize (parsers tolérants), history (cache TTL), sync (machine d'états LIVE/SYNCING/STALE/DEGRADED/ERROR), fixtures
 src/engine            features (indicateurs, régime, température, anomalies), portfolio, risk (SENTINEL), simulate (+ scénarios NL), cone, alpha (ARCHIVE), alerts, pipeline
 src/agents            oracle, flow, edge, allocator, sentinel, archive, gates (Risk Gate + sizing Kelly fractionnaire), reputation (calibration, edge decay), orchestrator
-src/ui                dom, starfield, orbital (carte orbitale), views-core, views-intel, sim, app.js
+src/ui                i18n, palette (Velvet par actif), dom, maree (scène mer/lune/éclairs pilotée par la Sentinelle), orbital (carte orbitale), views-core, views-intel, sim, app.js
 tests/run.js          tests Node
 docs/ARCHITECTURE.md  architecture, limites, plan par phases, top 10
 legacy/               ancien HL Cockpit v5 (référence)

@@ -10,14 +10,30 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="assets/css/app.css" />
   <!-- polices chargées sans bloquer les scripts : un CDN lent ne doit jamais retarder les données en direct -->
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'" />
-  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" /></noscript>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" /></noscript>
 </head>
-<body>
-<canvas id="stars" aria-hidden="true"></canvas>
+<body data-state="safe">
+<!-- Scène « Marée » : la mer, la lune et le ciel suivent le niveau de la Sentinelle (safe · warn · crit). Aucune image : CSS, SVG, canvas. -->
+<div class="maree" aria-hidden="true">
+  <div class="sky"><div class="sky-safe"></div><div class="sky-warn"></div><div class="sky-crit"></div></div>
+  <div class="stars" id="mr-stars"></div>
+  <div class="shooting" id="mr-shooting"></div>
+  <div class="moon-wrap"><div class="aura aura-safe"></div><div class="aura aura-warn"></div><div class="aura aura-crit"></div><div class="moon"><i class="crater c1"></i><i class="crater c2"></i><i class="crater c3"></i><i class="tint"></i></div></div>
+  <div class="clouds cl-warn"><i></i><i></i></div>
+  <div class="clouds cl-crit"><i></i><i></i></div>
+  <canvas id="sea"></canvas>
+  <canvas id="fauna"></canvas>
+  <div class="haze haze-safe"></div><div class="haze haze-warn"></div><div class="haze haze-crit"></div>
+  <div class="rain"></div>
+  <svg class="bolt" id="mr-bolt"></svg>
+  <div class="flash" id="mr-flash"></div>
+  <div class="crit-pulse"></div>
+  <div class="vignette"></div>
+</div>
 <div class="wrap">
   <header class="topbar">
-    <div class="brand"><b>ALPHA OS</b><span>terminal Hyperliquid</span></div>
+    <div class="brand"><b>ALPHA OS</b><span>terminal Hyperliquid</span><em id="mood" data-state="safe" title="Ambiance pilotée par le niveau de la Sentinelle">Nuit calme</em></div>
     <div id="sync" class="sync" data-s="IDLE"><span class="dot"></span><b>EN ATTENTE</b></div>
     <button id="btn-sync" class="iconbtn" title="Synchroniser maintenant">⟳</button>
     <button id="btn-privacy" class="iconbtn" aria-pressed="false" title="Masquer les montants">◐</button>
@@ -25,6 +41,7 @@
   </header>
   <div id="banners"></div>
   <div id="sync-detail" class="legend num" style="gap:14px;margin:4px 0 6px"></div>
+  <div id="fresh" class="fresh" aria-label="Fraîcheur par source"></div>
   <nav class="nav" aria-label="Sections">
     <a href="#cmd">Tableau de bord</a><a href="#orbit">Orbites</a><a href="#alerts">Veille</a><a href="#positions">Positions</a><a href="#sentinel">Sentinelle</a><a href="#market">Marché</a><a href="#council">Conseil</a><a href="#decisions">Décisions</a><a href="#simulator">Simuler</a><a href="#scenario">Et si…</a><a href="#cone">Cône</a><a href="#archive">Archive</a><a href="#settings">Réglages</a>
   </nav>
@@ -37,7 +54,7 @@
   <details id="orbit" class="deck" open>
     <summary><span class="chev">›</span><span class="ttl"><span class="eyebrow">Carte orbitale</span><h2>Quelle position peut tuer le portefeuille ?</h2></span><span class="sum" id="sum-orbit"></span></summary>
     <div class="body"><div class="card" style="padding:8px"><canvas id="orbit-canvas" class="orbit" width="800" height="380" aria-label="Carte orbitale des positions"></canvas>
-      <div class="legend"><span><i style="background:var(--long)"></i>Long</span><span><i style="background:var(--short)"></i>Short</span><span>taille = exposition</span><span>près du centre = près de la liquidation</span><span>halo = poids dans le risque</span><span>éclat = conviction</span><span>Touche un corps pour le détail</span></div>
+      <div class="legend"><span>couleur = actif</span><span><i style="background:var(--long)"></i>anneau long</span><span><i style="background:var(--short)"></i>anneau short</span><span>taille = exposition</span><span>près du centre = près de la liquidation</span><span>halo = poids dans le risque</span><span>éclat = conviction</span><span>Touche un corps pour le détail</span></div>
     </div></div>
   </details>
 
@@ -77,7 +94,7 @@
   </details>
 
   <details id="simulator" class="deck">
-    <summary><span class="chev">›</span><span class="ttl"><span class="eyebrow">Simulateur</span><h2>Actif · sens · quantité. C'est tout.</h2></span><span class="sum" id="sum-simulator"></span></summary>
+    <summary><span class="chev">›</span><span class="ttl"><span class="eyebrow">Simulateur</span><h2>Actif · sens · quantité, ou marge × levier. C'est tout.</h2></span><span class="sum" id="sum-simulator"></span></summary>
     <div class="body"><div class="card"><div id="sim-form"></div><div id="sim-result" style="margin-top:12px"></div></div></div>
   </details>
 
@@ -130,8 +147,9 @@
 <script src="src/engine/alerts.js"></script>
 <script src="src/engine/pipeline.js"></script>
 <script src="src/ui/i18n.js"></script>
+<script src="src/ui/palette.js"></script>
 <script src="src/ui/dom.js"></script>
-<script src="src/ui/starfield.js"></script>
+<script src="src/ui/maree.js"></script>
 <script src="src/ui/orbital.js"></script>
 <script src="src/ui/views-core.js"></script>
 <script src="src/ui/views-intel.js"></script>

@@ -39,7 +39,7 @@
     set($("#decisions-body"), raw(o.cards.map((c) => {
       const st = c.status, sz = c.sizing;
       return html`<div class="card decision ${st === "APPROVED" ? "lift" : ""}" data-card="${c.id}"><span class="stripe ${st === "APPROVED" ? "NORMAL" : st === "VETO" ? "CRITICAL" : "WATCH"}"></span>
-        <div class="head"><span class="sym">${c.coin}</span>${sideTag(c.side)}<span class="tag">${c.name}</span>${tag(st === "APPROVED" ? "Sentinelle : approuvé" : st === "VETO" ? "Sentinelle : VETO" : "Contrôle : refusé", st === "APPROVED" ? "ok" : st === "VETO" ? "crit" : "warn")}<span style="margin-left:auto">${ring(c.conviction, "conviction", st === "APPROVED" ? "var(--ok)" : "var(--warn)")}</span></div>
+        <div class="head"><span class="sym">${raw(AOS.palette.dot(c.coin))}${c.coin}</span>${sideTag(c.side)}<span class="tag">${c.name}</span>${tag(st === "APPROVED" ? "Sentinelle : approuvé" : st === "VETO" ? "Sentinelle : VETO" : "Contrôle : refusé", st === "APPROVED" ? "ok" : st === "VETO" ? "crit" : "warn")}<span style="margin-left:auto">${ring(c.conviction, "conviction", st === "APPROVED" ? "var(--ok)" : "var(--warn)")}</span></div>
         <div class="levels"><div><div class="k">Entrée</div><div class="v">${px(c.entry)}</div></div><div><div class="k">Invalidation</div><div class="v neg">${px(c.invalidation)}</div></div><div><div class="k">Objectif</div><div class="v pos">${px(c.target)}</div></div></div>
         <div class="facts">${tag(`espérance ${c.evR >= 0 ? "+" : ""}${c.evR.toFixed(2)}R`, c.evR > 0 ? "ok" : "bad")}${tag(`risque/gain ${c.rr.toFixed(1)}`)}${tag(`p ${Math.round(c.pRange[0] * 100)}–${Math.round(c.pRange[1] * 100)} % · incertitude ${T.unc(c.uncertainty)}`)}${tag(`régime : ${T.regime(c.regime)}`)}${tag(`flux : ${c.flowDir > 0.15 ? "favorable" : c.flowDir < -0.15 ? "défavorable" : "neutre"}`)}${tag(`portefeuille : ${c.portfolioImpact === "Positive" ? "amélioré" : c.portfolioImpact === "Negative" ? "dégradé" : "neutre"}`)}${tag(`funding : ${c.fundingLabel === "Cost" ? "coût" : c.fundingLabel === "Tailwind" ? "favorable" : "neutre"}`)}${sz ? tag(`taille ${fmt.qty(sz.qty)} · mise en risque ${fmt.usd(sz.riskUsd)}`, "accent") : ""}</div>
         <div class="gates">${raw(c.gate.gates.map((g) => `<span class="g ${g.pass ? "pass" : "fail"}" title="${esc(g.detail)}">${esc(T.gate(g.name))} ${g.pass ? "✓" : "✕"}</span>`).join(""))}</div>
@@ -89,6 +89,7 @@
     set($("#archive-body"), html`
       <div class="card accent"><h3>La question qui compte</h3>
         <div class="rowring">${ring(isNum(m?.alphaBTC) ? 50 + clamp(m.alphaBTC * 100, -50, 50) : NaN, "alpha 30 j", isNum(m?.alphaBTC) && m.alphaBTC >= 0 ? "var(--ok)" : "var(--bad)", isNum(m?.alphaBTC) ? fmt.pct(m.alphaBTC, 0, true) : "—")}<div><div class="big" style="font-size:18px">${isNum(m?.alphaBTC) ? (m.alphaBTC >= 0 ? "Sur 30 jours, ton trading a battu BTC." : "Sur 30 jours, tenir du BTC aurait fait mieux.") : "Pas assez d'historique pour répondre."}</div><div class="sub2">${m && isNum(m.ret) ? `Toi ${fmt.pct(m.ret, 1, true)} · BTC ${fmt.pct(m.btc, 1, true)} · ETH ${fmt.pct(m.eth, 1, true)} · ne rien faire 0 %` : ""}${isNum(al.perpsAllTimePnl) ? ` · PnL perps cumulé depuis le début : <b class="${al.perpsAllTimePnl >= 0 ? "pos" : "neg"}" data-private>${fmt.usdSigned(al.perpsAllTimePnl)}</b>` : ""}</div></div></div>
+        <div id="eq-curve" style="margin-top:12px"></div>
       </div>
       <div class="mini" style="margin-top:12px">
         <div class="m"><div class="k">Trades clos</div><div class="v">${st.n} <small class="dimc">incert. ${T.unc(st.uncertainty)}</small></div></div>
@@ -111,7 +112,37 @@
         ${rep.decisionsList.some((d) => d.resolved) ? more("Décisions résolues", raw(`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Date</th><th>Carte</th><th>Action</th><th class="r">p</th><th>Résultat</th><th class="r">R</th></tr></thead><tbody>${rep.decisionsList.filter((d) => d.resolved).slice(0, 15).map((d) => `<tr><td class="t">${esc(fmt.date(d.ts))}</td><td class="t">${esc(d.coin)} ${esc(d.side)} ${esc(T.setup(d.type))}</td><td class="t">${esc({ EXECUTE: "exécuté", SIMULATE: "simulé", IGNORE: "ignoré", VETO: "veto", GATE: "refusé", AUTO: "proposé" }[d.action] || d.action)}</td><td class="r">${Math.round(d.pWin * 100)} %</td><td class="t ${/WIN/.test(d.outcome) ? "pos" : "neg"}">${/WIN/.test(d.outcome) ? "gagné" : "perdu"}${/EXPIRED/.test(d.outcome) ? " (à l'échéance)" : ""}</td><td class="r">${isNum(d.realizedR) ? d.realizedR.toFixed(2) : "—"}</td></tr>`).join("")}</tbody></table></div>`)) : ""}
       </div>`);
     $("#j-add").addEventListener("click", () => { const title = $("#j-title").value.trim(), note = $("#j-note").value.trim(); if (!title && !note) return; AOS.store.push("journal", { id: AOS.util.uid(), ts: Date.now(), title, type: $("#j-type").value, note, regime: a.features.regime.regime, level: a.risk.level }); V.archive(a); });
+    V.equityCurve(a);
     sum("archive", isNum(m?.alphaBTC) ? `alpha 30 j ${fmt.pct(m.alphaBTC, 1, true)}` : `${st.n} trades`);
+  };
+
+  // ---- COURBE D'EQUITY (toi rebasé · BTC rebasé · plus-haut) — héritée de Cryptex ------------------------------
+  V.equityCurve = function (a) {
+    const box = $("#eq-curve"); if (!box) return;
+    const hasPerp = !!a.history?.portfolio?.perpMonth;
+    const c = AOS.alpha.equityCurve(a.history, hasPerp ? "perpMonth" : "month", hasPerp ? "perps" : "total");
+    if (!c.ok) { set(box, html`<div class="hint">Courbe d'equity indisponible : ${c.reason}.</div>`); return; }
+    const btcCol = AOS.palette.color("BTC");
+    set(box, html`<h3 style="margin-top:4px">Courbe des 30 jours ${prov(c.prov)} <span class="tag">${hasPerp ? "perps" : "compte total"} · hors dépôts/retraits</span></h3>
+      <canvas id="eq-canvas" class="chart" width="800" height="240" aria-label="Courbe d'equity rebasée"></canvas>
+      <div class="legend"><span><i class="line" style="background:var(--accent)"></i>Toi ${fmt.pct(c.you, 1, true)}</span><span><i class="line" style="background:${btcCol}"></i>BTC ${fmt.pct(c.btc, 1, true)}</span><span><i class="line" style="background:rgba(255,255,255,.45)"></i>plus-haut ${fmt.pct(c.hwm, 1, true)}</span><span class="${c.dd < -0.1 ? "neg" : ""}">repli actuel ${fmt.pct(c.dd, 1)}</span>${isNum(c.btcGapHours) && c.btcGapHours > 12 ? html`<span class="warnc">écart d'alignement BTC : ${c.btcGapHours} h</span>` : ""}</div>`);
+    const cv = $("#eq-canvas"), ctx = cv.getContext("2d");
+    const W = cv.width, H = cv.height, padL = 54, padR = 12, padT = 12, padB = 26;
+    const pts = c.points, t0 = pts[0].t, t1 = pts[pts.length - 1].t || t0 + 1;
+    const vals = pts.flatMap((p) => [p.you, p.hwm, isNum(p.btc) ? p.btc : p.you]);
+    let lo = Math.min(...vals), hi = Math.max(...vals); const span = Math.max(hi - lo, 0.02); lo -= span * 0.08; hi += span * 0.08;
+    const X = (t) => padL + ((t - t0) / (t1 - t0)) * (W - padL - padR), Y = (v) => padT + (1 - (v - lo) / (hi - lo)) * (H - padT - padB);
+    ctx.clearRect(0, 0, W, H);
+    ctx.strokeStyle = "rgba(196,208,232,.1)"; ctx.fillStyle = "#98a4b8"; ctx.font = "11px JetBrains Mono, monospace"; ctx.textAlign = "right";
+    for (let i = 0; i <= 4; i++) { const v = lo + ((hi - lo) * i) / 4; ctx.beginPath(); ctx.moveTo(padL, Y(v)); ctx.lineTo(W - padR, Y(v)); ctx.stroke(); ctx.fillText(fmt.pct(v, 0, true), padL - 6, Y(v) + 4); }
+    ctx.textAlign = "center"; for (let i = 0; i <= 4; i++) { const t = t0 + ((t1 - t0) * i) / 4; ctx.fillText(fmt.date(t), X(t), H - 8); }
+    // zone de repli sous le plus-haut
+    ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(X(p.t), Y(p.hwm)) : ctx.moveTo(X(p.t), Y(p.hwm)))); [...pts].reverse().forEach((p) => ctx.lineTo(X(p.t), Y(p.you))); ctx.closePath(); ctx.fillStyle = "rgba(240,106,126,.14)"; ctx.fill();
+    const line = (key, col, width, dash) => { ctx.beginPath(); let started = false; for (const p of pts) { const v = p[key]; if (!isNum(v)) continue; if (!started) { ctx.moveTo(X(p.t), Y(v)); started = true; } else ctx.lineTo(X(p.t), Y(v)); } ctx.strokeStyle = col; ctx.lineWidth = width; ctx.setLineDash(dash || []); ctx.stroke(); ctx.setLineDash([]); };
+    ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(padL, Y(0)); ctx.lineTo(W - padR, Y(0)); ctx.strokeStyle = "rgba(255,255,255,.3)"; ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]);
+    line("hwm", "rgba(255,255,255,.45)", 1, [3, 4]);
+    line("btc", btcCol, 1.6);
+    line("you", "#e2c48c", 2.2);
   };
 
   // ---- VEILLE -----------------------------------------------------------------------------------------

@@ -6,11 +6,10 @@
   <meta name="color-scheme" content="dark" />
   <title>Alpha OS · Démo</title>
   <link rel="stylesheet" href="assets/css/app.css" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" media="print" onload="this.media='all'" />
   <script>window.AOS_DEMO = true;</script>
 </head>
-<body>
-<canvas id="stars" aria-hidden="true"></canvas>
+<body data-state="safe">
 <div class="wrap" id="app-root"><p class="empty" style="padding:24px">Chargement de la démo…</p></div>
 <script>
   // Load the main page markup (same origin) so demo.html stays a thin wrapper.
@@ -19,6 +18,8 @@
       const txt = await (await fetch("index.html", { cache: "no-store" })).text();
       const doc = new DOMParser().parseFromString(txt, "text/html");
       const wrap = doc.querySelector(".wrap");
+      const scene = doc.querySelector(".maree");
+      if (scene) document.body.insertBefore(scene, document.body.firstChild);
       document.getElementById("app-root").replaceWith(wrap);
       for (const s of doc.querySelectorAll("script[src]")) { await new Promise((res, rej) => { const el = document.createElement("script"); el.src = s.getAttribute("src"); el.onload = res; el.onerror = rej; document.body.appendChild(el); }); }
     } catch (e) { document.body.innerHTML = '<p style="padding:24px;font-family:sans-serif;color:#e7eaf1">Impossible de charger index.html : ' + (e && e.message) + '. Ouvre <a href="index.html?demo=1" style="color:#8fb3ff">index.html?demo=1</a>.</p>'; }

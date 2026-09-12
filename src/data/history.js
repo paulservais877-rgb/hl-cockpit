@@ -8,17 +8,19 @@
 
   const mem = new Map();
   const TTL = { candles1h: 20 * 60e3, candles4h: 60 * 60e3, candles1d: 3 * H, funding: H, fills: 5 * 60e3, userFunding: 15 * 60e3, portfolio: 15 * 60e3, ledger: H, l2: 60e3 };
+  /** horodatage réel d'obtention par clé de cache (une donnée servie du cache n'est pas « fraîche » : sa date compte) */
+  const fetchedAt = new Map();
 
   function cacheGet(key, ttl) {
     const m = mem.get(key);
-    if (m && Date.now() - m.ts < ttl) return m.data;
+    if (m && Date.now() - m.ts < ttl) { fetchedAt.set(key, m.ts); return m.data; }
     const s = store.storage.get(store.KEYS.history(key));
-    if (s && Date.now() - s.ts < ttl) { mem.set(key, s); return s.data; }
+    if (s && Date.now() - s.ts < ttl) { mem.set(key, s); fetchedAt.set(key, s.ts); return s.data; }
     return null;
   }
   function cacheSet(key, data, persist = true) {
     const rec = { ts: Date.now(), data };
-    mem.set(key, rec);
+    mem.set(key, rec); fetchedAt.set(key, rec.ts);
     if (persist) store.storage.set(store.KEYS.history(key), rec);
   }
 
@@ -139,27 +141,33 @@
     const universe = new Set(Object.keys(snapshot?.meta?.assets || {}));
     const core = [...new Set([...majors, ...held])].filter((c) => universe.size === 0 || universe.has(c));
     const extra = [...new Set(watchlist)].filter((c) => !core.includes(c) && (universe.size === 0 || universe.has(c)));
-    const out = { candles: {}, funding: {}, l2: {}, fills: null, userFunding: null, portfolio: null, ledger: null, spot: null, errors: [], loadedTs: Date.now() };
+    const out = { candles: {}, funding: {}, l2: {}, fills: null, userFunding: null, portfolio: null, ledger: null, spot: null, errors: [], loadedTs: Date.now(), sources: {} };
     const tasks = [];
-    const wrap = (label, p, assign) => tasks.push(p.then(assign).catch((e) => out.errors.push(label + ": " + (e?.message || e))));
+    const w = wallet ? wallet.toLowerCase() : "";
+    // enveloppe par source (héritée du bus V2 de Cryptex) : {ok, ts, ttl, error} — chaque vue peut dire de quand date ce qu'elle montre
+    const mark = (group, key, ttl, err) => {
+      const s = (out.sources[group] = out.sources[group] || { ok: true, ts: 0, ttl, n: 0, errors: [] });
+      if (err) { s.ok = false; s.errors.push(err); } else { s.n++; const ts = fetchedAt.get(key) || Date.now(); s.ts = s.ts ? Math.min(s.ts, ts) : ts; }
+    };
+    const wrap = (label, group, key, ttl, p, assign) => tasks.push(p.then((d) => { assign(d); mark(group, key, ttl); }).catch((e) => { const msg = label + ": " + (e?.message || e); out.errors.push(msg); mark(group, key, ttl, msg); }));
     for (const c of core) {
-      wrap("candles1h " + c, candles(c, "1h", 30), (d) => { (out.candles[c] = out.candles[c] || {})["1h"] = expand(d); });
-      wrap("candles1d " + c, candles(c, "1d", 220), (d) => { (out.candles[c] = out.candles[c] || {})["1d"] = expand(d); });
-      wrap("funding " + c, fundingHistory(c, 30), (d) => { out.funding[c] = d.map((r) => ({ t: r[0], rate: r[1], premium: r[2] })); });
+      wrap("candles1h " + c, "candles", `c_${c}_1h_30`, TTL.candles1h, candles(c, "1h", 30), (d) => { (out.candles[c] = out.candles[c] || {})["1h"] = expand(d); });
+      wrap("candles1d " + c, "candles", `c_${c}_1d_220`, TTL.candles1d, candles(c, "1d", 220), (d) => { (out.candles[c] = out.candles[c] || {})["1d"] = expand(d); });
+      wrap("funding " + c, "funding", `f_${c}_30`, TTL.funding, fundingHistory(c, 30), (d) => { out.funding[c] = d.map((r) => ({ t: r[0], rate: r[1], premium: r[2] })); });
     }
-    for (const c of extra) wrap("candles1d " + c, candles(c, "1d", 40), (d) => { (out.candles[c] = out.candles[c] || {})["1d"] = expand(d); });
-    for (const c of held) wrap("l2 " + c, l2(c), (d) => { out.l2[c] = d; });
+    for (const c of extra) wrap("candles1d " + c, "candles", `c_${c}_1d_40`, TTL.candles1d, candles(c, "1d", 40), (d) => { (out.candles[c] = out.candles[c] || {})["1d"] = expand(d); });
+    for (const c of held) wrap("l2 " + c, "l2", `l2_${c}`, TTL.l2, l2(c), (d) => { out.l2[c] = d; });
     if (wallet) {
-      wrap("userFills", userFills(wallet, 30), (d) => { out.fills = d; });
-      wrap("userFunding", userFunding(wallet, 90), (d) => { out.userFunding = d; });
-      wrap("portfolio", portfolio(wallet), (d) => { out.portfolio = d; });
-      wrap("ledger", ledger(wallet, 365), (d) => { out.ledger = d; });
-      wrap("spot", spot(wallet), (d) => { out.spot = d; });
+      wrap("userFills", "fills", `fills_${w}_30`, TTL.fills, userFills(wallet, 30), (d) => { out.fills = d; });
+      wrap("userFunding", "userFunding", `uf_${w}_90`, TTL.userFunding, userFunding(wallet, 90), (d) => { out.userFunding = d; });
+      wrap("portfolio", "portfolio", `pf_${w}`, TTL.portfolio, portfolio(wallet), (d) => { out.portfolio = d; });
+      wrap("ledger", "ledger", `lg_${w}_365`, TTL.ledger, ledger(wallet, 365), (d) => { out.ledger = d; });
+      wrap("spot", "spot", `spot_${w}`, TTL.portfolio, spot(wallet), (d) => { out.spot = d; });
     }
     let done = 0;
     await Promise.all(tasks.map((t) => t.then(() => onProgress?.(++done, tasks.length))));
     return out;
   }
 
-  AOS.history = { candles, expand, fundingHistory, userFills, userFunding, portfolio, ledger, l2, spot, loadAll, TTL };
+  AOS.history = { candles, expand, fundingHistory, userFills, userFunding, portfolio, ledger, l2, spot, loadAll, TTL, fetchedAt: (key) => fetchedAt.get(key) };
 })(typeof window !== "undefined" ? window : globalThis);

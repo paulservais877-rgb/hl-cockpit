@@ -205,5 +205,33 @@
     return { closed, open, complete, truncatedCount: rec.truncatedCount, stats: st, fundingPaid, fundingReceived, fundingNet: fundingReceived - fundingPaid, fundingByCoin, windows, capital, perpsAllTimePnl, attribution, counterfactuals: cf, patterns, activity, leakage: { fees90d: stats.sum(fills.map((f) => f.fee || 0)), feesWindowDays: fillsSpanDays, funding90d: stats.sum(uf.map((r) => r.usdc)) }, prov: fills.length ? "HISTORICAL" : "UNKNOWN", fillsCount: fills.length };
   }
 
-  AOS.alpha = { reconstructTrades, tradeStats, dietz, dietzLedger, benchmarkReturn, maxDrawdown, sharpeSortino, compute };
+  /**
+   * Courbe d'equity rebasée (héritée de Cryptex) : valeur du compte hors dépôts/retraits, en % depuis le début de la fenêtre,
+   * BTC rebasé sur la même fenêtre (clôture journalière ≤ t), plus-haut historique (HWM) et repli courant.
+   * L'écart d'alignement entre le premier point du compte et la bougie BTC utilisée est déclaré, jamais masqué.
+   */
+  function equityCurve(history, key = "perpMonth", kind = "perps") {
+    const pf = history?.portfolio || {};
+    const series = pf[key]?.accountValue || [];
+    if (series.length < 2) return { ok: false, reason: "série de valeur indisponible", key, prov: "UNKNOWN" };
+    const ledger = history?.ledger || [];
+    const t0 = series[0][0], v0 = series[0][1];
+    if (!(v0 > 0)) return { ok: false, reason: "compte parti de 0 sur cette fenêtre : courbe en % non calculable", key, prov: "UNKNOWN" };
+    const flows = ledger.filter((l) => l.t > t0).map((l) => ({ t: l.t, amt: kind === "perps" ? l.flowPerps : l.flowTotal })).filter((f) => isNum(f.amt) && f.amt !== 0).sort((a, b) => a.t - b.t);
+    const btc = history?.candles?.BTC?.["1d"] || [];
+    const closeAt = (t) => { let best = null; for (const k of btc) { if (k.t <= t) best = k; else break; } return best; };
+    const b0 = closeAt(t0) || btc[0] || null;
+    let fi = 0, cum = 0, peak = -Infinity;
+    const points = series.map(([t, v]) => {
+      while (fi < flows.length && flows[fi].t <= t) { cum += flows[fi].amt; fi++; }
+      const adj = v - cum; // valeur nette des flux : une hausse due à un dépôt n'est pas une performance
+      peak = Math.max(peak, adj);
+      const bk = b0 ? closeAt(t) : null;
+      return { t, v, adj, you: adj / v0 - 1, hwm: peak / v0 - 1, dd: peak > 0 ? adj / peak - 1 : 0, btc: bk && b0 && b0.c > 0 ? bk.c / b0.c - 1 : NaN };
+    });
+    const last = points[points.length - 1];
+    return { ok: true, key, kind, t0, t1: last.t, v0, v1: last.v, points, you: last.you, btc: last.btc, hwm: last.hwm, dd: last.dd, flows: cum, btcGapHours: b0 ? Math.round(Math.abs(t0 - b0.t) / H) : NaN, prov: b0 ? "HISTORICAL" : "PARTIAL" };
+  }
+
+  AOS.alpha = { reconstructTrades, tradeStats, dietz, dietzLedger, benchmarkReturn, maxDrawdown, sharpeSortino, equityCurve, compute };
 })(typeof window !== "undefined" ? window : globalThis);

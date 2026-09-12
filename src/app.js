@@ -33,12 +33,29 @@
     el.innerHTML = `<span class="dot"></span><b>${label}</b><span>${isNum(age) ? "il y a " + fmt.age(age) : "—"}</span>${S.ws && S.ws !== "OFF" && S.ws !== "DEMO" ? `<span class="dimc">ws ${esc(wsLabel)}</span>` : ""}${S.source === "demo" ? '<span class="tag info">DÉMO</span>' : ""}`;
     const det = $("#sync-detail");
     if (det) det.innerHTML = `<span>DERNIÈRE SYNCHRO <b class="num">${esc(fmt.time(S.lastOkTs))}</b></span><span>FRAÎCHEUR <b class="num">${isNum(age) ? esc(fmt.age(age)) : "—"}</b></span><span>API <b>${esc(label)}</b>${S.latencyMs ? ` <span class="dimc">${Math.round(S.latencyMs)} ms</span>` : ""}</span><span>MODE DÉGRADÉ <b class="${S.partial?.length ? "warnc" : ""}">${S.partial?.length ? "OUI (" + esc(S.partial.join(", ")) + ")" : "NON"}</b></span><span>PROCHAINE <b class="num">${isNum(S.nextTs) ? esc(fmt.age(Math.max(0, S.nextTs - nowMs()))) : "—"}</b></span>${S.errors?.length ? `<span class="neg">${esc(S.errors.slice(-2).join(" · "))}</span>` : ""}${history?.errors?.length ? `<span class="warnc">historique partiel : ${history.errors.length} erreur(s)</span>` : ""}`;
+    renderFreshness(S, age);
+  }
+
+  // ---- fraîcheur par source (bus V2 : chaque donnée porte sa date, jamais une constante de repli) ----
+  const SOURCE_LABELS = [["account", "compte"], ["ws", "websocket"], ["candles", "bougies"], ["funding", "funding"], ["l2", "carnet"], ["fills", "fills"], ["userFunding", "funding payé"], ["portfolio", "portfolio"], ["ledger", "ledger"], ["spot", "spot"]];
+  function renderFreshness(S, ageAccount) {
+    const el = $("#fresh"); if (!el) return;
+    const now = nowMs();
+    const rows = SOURCE_LABELS.map(([key, label]) => {
+      if (key === "account") { const st = S.status === "ERROR" ? "err" : S.status === "STALE" ? "stale" : isNum(ageAccount) ? (ageAccount > store.settings.staleAfterMs ? "stale" : "ok") : "off"; return { label, st, age: ageAccount, title: "clearinghouseState + metaAndAssetCtxs + allMids" }; }
+      if (key === "ws") { if (!S.ws || S.ws === "OFF") return { label, st: "off", age: NaN, title: "WebSocket désactivé" }; const a = isNum(S.wsTs) ? now - S.wsTs : NaN; return { label, st: S.ws === "ERROR" ? "err" : S.ws === "DEMO" ? "ok" : isNum(a) ? (a > 120e3 ? "stale" : "ok") : "off", age: a, title: "allMids + webData2 : " + S.ws }; }
+      const s = history?.sources?.[key];
+      if (!s) return { label, st: "off", age: NaN, title: "pas encore chargé" };
+      const a = s.ts ? now - s.ts : NaN;
+      return { label, st: !s.ok ? "err" : isNum(a) && a > (s.ttl || 15 * 60e3) * 1.5 ? "stale" : "ok", age: a, title: s.ok ? `${s.n} requête(s) · périmé après ${Math.round((s.ttl || 0) / 60e3)} min` : s.errors.slice(0, 2).join(" · ") };
+    });
+    el.innerHTML = rows.map((r) => `<span class="fx fx-${r.st}" title="${esc(r.title)}"><i></i>${esc(r.label)}${isNum(r.age) ? ` <b>${esc(fmt.age(r.age))}</b>` : r.st === "err" ? " <b>erreur</b>" : ""}</span>`).join("");
   }
 
   // ---- history loading ---------------------------------------------------------------
   async function ensureHistory(snapshot) {
     if (DEMO) {
-      if (!history) { const fx = AOS.fixtures, N = AOS.normalize; history = { candles: fx.history.candles, funding: fx.history.funding, l2: fx.history.l2, fills: N.parseFills(fx.fills), userFunding: N.parseUserFunding(fx.userFunding), portfolio: N.parsePortfolio(fx.portfolio), ledger: N.parseLedger(fx.ledger), spot: N.parseSpot(fx.spotClearinghouseState), errors: [], loadedTs: nowMs() }; }
+      if (!history) { const fx = AOS.fixtures, N = AOS.normalize; history = { candles: fx.history.candles, funding: fx.history.funding, l2: fx.history.l2, fills: N.parseFills(fx.fills), userFunding: N.parseUserFunding(fx.userFunding), portfolio: N.parsePortfolio(fx.portfolio), ledger: N.parseLedger(fx.ledger), spot: N.parseSpot(fx.spotClearinghouseState), errors: [], loadedTs: nowMs(), sources: Object.fromEntries(["candles", "funding", "l2", "fills", "userFunding", "portfolio", "ledger", "spot"].map((k) => [k, { ok: true, ts: nowMs(), ttl: 15 * 60e3, n: 1, errors: [], demo: true }])) }; }
       return history;
     }
     const coins = (snapshot.positions || []).map((p) => p.coin).sort().join(",");
@@ -86,6 +103,9 @@
     V.cone(a);
     V.archive(a);
     orbital?.update(a, { privacy: store.settings.privacy });
+    // la scène subit le niveau de la Sentinelle : NORMAL → nuit calme, VIGILANCE/TENDU → crépuscule, DANGER/CRITIQUE → tempête
+    AOS.maree?.setLevel(a.risk.level);
+    renderSync();
     D.sum("orbit", a.risk.gravity[0] ? `${a.risk.gravity[0].coin} porte ${Math.round(a.risk.gravity[0].share * 100)} % du risque` : "aucune position");
     $("#stamp").textContent = `Analyse à ${fmt.time(a.ts)} · ${a.snapshot.positions.length} position(s) · calcul complet en ${a.timings.cone} ms`;
   }
@@ -156,7 +176,8 @@
 
   // ---- boot ---------------------------------------------------------------------------------------
   function boot() {
-    AOS.starfield.start($("#stars"));
+    AOS.maree.start();
+    document.addEventListener("visibilitychange", () => document.body.classList.toggle("aos-hidden", document.hidden));
     orbital = AOS.orbital.create($("#orbit-canvas"), { onSelect: (coin) => { store.state.ui.selected = coin; if (analysis) { V.positionDetail(analysis, coin); } } });
     if (DEMO) { store.saveSettings({ wallet: AOS.fixtures.wallet }); banner("info", "<b>MODE DÉMO</b> — données inventées pour l'exemple, aucune connexion à Hyperliquid. Retire <code>?demo=1</code> de l'adresse pour ton wallet.", "demo"); }
     else if (!store.settings.wallet) store.saveSettings({ wallet: DEFAULT_WALLET });

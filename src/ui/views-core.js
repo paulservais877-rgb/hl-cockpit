@@ -60,7 +60,7 @@
       const v = verdicts.find((x) => x.coin === p.coin), g = grav.find((x) => x.coin === p.coin);
       const liqCls = !isNum(p.liqDist) ? "dimc" : p.liqDist < 0.1 ? "neg" : p.liqDist < 0.2 ? "warnc" : "";
       return html`<div class="card tap poscard" data-coin="${p.coin}" role="button" tabindex="0"><span class="stripe ${p.liqDist < 0.1 ? "DANGER" : p.liqDist < 0.2 ? "WATCH" : "NORMAL"}"></span>
-        <div><div class="sym">${p.coin}</div>${sideTag(p.side)}</div>
+        <div><div class="sym">${raw(AOS.palette.dot(p.coin))}${p.coin}</div>${sideTag(p.side)}</div>
         <div class="meta"><span data-private>${fmt.qty(p.absSize)} · ${fmt.usd(p.notional)}</span> · ${fmt.x(p.leverage, 0)}<br/>entrée <span class="num">${px(p.entry)}</span> → <span class="num">${px(p.mark)}</span></div>
         <div class="pnl ${p.upnl >= 0 ? "pos" : "neg"}"><span data-private>${fmt.usdSigned(p.upnl)}</span><br/><small class="num" style="font-weight:500">${fmt.pct(p.roe, 1, true)}</small></div>
         <div class="foot">${verdictTag(v?.verdict)}<span class="chip">liq ${p.noLiqAlone ? raw('<b class="pos" title="Aucune liquidation atteignable par cet actif seul">∞</b>') : raw(`<b class="${liqCls}">${esc(fmt.pct(p.liqDist, 0))}</b>`)}</span><span class="chip">funding <b>${fmt.usdSigned(p.fundingPerDay)}/j</b></span><span class="chip">poids risque <b>${g ? Math.round(g.share * 100) + " %" : "—"}</b></span>${isNum(p.stopLoss) ? html`<span class="chip">stop <b>${px(p.stopLoss)}</b></span>` : tag("SANS STOP", "warn")}</div>
@@ -95,7 +95,7 @@
     const h = a.agents.FLOW.heatmap.find((x) => x.coin === coin);
     const cfUsd = a.alpha?.fundingByCoin?.find((x) => x.coin === coin)?.net;
     el.hidden = false;
-    set(el, html`<div class="card lift"><h3>${p.coin} ${sideTag(p.side)} ${verdictTag(v?.verdict)}<button class="iconbtn" data-close-detail style="margin-left:auto;min-height:32px">Fermer ✕</button></h3>
+    set(el, html`<div class="card lift"><h3>${raw(AOS.palette.dot(p.coin))}${p.coin} ${sideTag(p.side)} ${verdictTag(v?.verdict)}<button class="iconbtn" data-close-detail style="margin-left:auto;min-height:32px">Fermer ✕</button></h3>
       <div style="font-size:13.5px;margin-bottom:8px">${v?.why?.[0] || ""}</div>
       <div class="grid c2">
         <div>
@@ -166,7 +166,7 @@
           ${bandHtml(sv.stress, "Stress (tout corrélé)")}
           <div class="hint" style="margin-top:8px">Seuils : VIGILANCE = −10 % d'equity · TENDU −25 % · DANGER −50 % · CRITIQUE −75 % · LIQ = equity ≤ marge de maintenance.</div>
           <h3 style="margin-top:14px">Gravité de liquidation</h3>
-          ${raw(rk.gravity.map((g) => `<div style="margin:6px 0"><div style="display:flex;justify-content:space-between;font-size:12.5px"><span><b class="num">${esc(g.coin)}</b> ${esc(g.side)} <span class="dimc">levier ${esc(fmt.x(g.lev, 0))} · vol ×${g.volR.toFixed(1)} · liq ${esc(fmt.pct(g.liqDist, 0))}</span></span><b class="num">${Math.round(g.share * 100)} %</b></div><div class="bar"><i style="width:${(g.share * 100).toFixed(1)}%;background:${g.side === "LONG" ? "var(--long)" : "var(--short)"}"></i></div></div>`).join("") || '<div class="empty">Aucune position</div>')}
+          ${raw(rk.gravity.map((g) => `<div style="margin:6px 0"><div style="display:flex;justify-content:space-between;font-size:12.5px"><span>${AOS.palette.dot(g.coin)}<b class="num">${esc(g.coin)}</b> ${esc(g.side)} <span class="dimc">levier ${esc(fmt.x(g.lev, 0))} · vol ×${g.volR.toFixed(1)} · liq ${esc(fmt.pct(g.liqDist, 0))}</span></span><b class="num">${Math.round(g.share * 100)} %</b></div><div class="bar"><i style="width:${(g.share * 100).toFixed(1)}%;background:${AOS.palette.color(g.coin)}"></i></div></div>`).join("") || '<div class="empty">Aucune position</div>')}
         </div>
       </div>
       <div class="card" style="margin-top:12px">

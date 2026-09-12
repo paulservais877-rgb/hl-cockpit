@@ -68,7 +68,9 @@
       for (const b of bodies) {
         const { x, y } = bodyPos(b, t);
         const R = 5 + b.size * 8;
-        const col = b.side === "LONG" ? "111,211,176" : "240,132,151";
+        // couleur Velvet de l'actif pour le corps ; le sens (long/short) tient dans l'anneau
+        const col = AOS.palette ? AOS.palette.rgb(b.coin).join(",") : b.side === "LONG" ? "111,211,176" : "240,132,151";
+        const sideCol = b.side === "LONG" ? "rgba(111,211,176,.85)" : "rgba(240,132,151,.85)";
         // gravity halo
         if (b.grav > 0.05) { const hg = ctx.createRadialGradient(x, y, R, x, y, R + 18 + 40 * b.grav); hg.addColorStop(0, `rgba(${col},${0.18 + 0.25 * b.grav})`); hg.addColorStop(1, `rgba(${col},0)`); ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(x, y, R + 18 + 40 * b.grav, 0, Math.PI * 2); ctx.fill(); }
         // body — brightness = conviction alignment
@@ -76,10 +78,11 @@
         const bg = ctx.createRadialGradient(x - R * 0.3, y - R * 0.3, 1, x, y, R);
         bg.addColorStop(0, `rgba(255,255,255,${0.5 * alpha})`); bg.addColorStop(0.4, `rgba(${col},${alpha})`); bg.addColorStop(1, `rgba(${col},${alpha * 0.55})`);
         ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
-        // pnl ring
-        ctx.beginPath(); ctx.arc(x, y, R + 3, 0, Math.PI * 2); ctx.strokeStyle = isNum(b.pnl) ? (b.pnl >= 0 ? "rgba(69,211,154,.7)" : "rgba(240,106,126,.7)") : "rgba(255,255,255,.2)"; ctx.lineWidth = 1.2; ctx.stroke();
+        // side ring (long/short) then pnl ring
+        ctx.beginPath(); ctx.arc(x, y, R + 2, 0, Math.PI * 2); ctx.strokeStyle = sideCol; ctx.lineWidth = 2; ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y, R + 5, 0, Math.PI * 2); ctx.strokeStyle = isNum(b.pnl) ? (b.pnl >= 0 ? "rgba(69,211,154,.55)" : "rgba(240,106,126,.55)") : "rgba(255,255,255,.2)"; ctx.lineWidth = 1; ctx.setLineDash([2, 3]); ctx.stroke(); ctx.setLineDash([]);
         // label
-        ctx.fillStyle = "#e7eaf1"; ctx.font = "700 11px JetBrains Mono, monospace"; ctx.textAlign = "center"; ctx.fillText(b.coin, x, y - R - 8);
+        ctx.fillStyle = "#e7eaf1"; ctx.font = "700 11px JetBrains Mono, monospace"; ctx.textAlign = "center"; ctx.fillText(b.coin, x, y - R - 10);
         ctx.fillStyle = "#8b93a7"; ctx.font = "500 9.5px JetBrains Mono, monospace";
         ctx.fillText((privacy ? "" : fmt.usdSigned(b.pnl, 0) + " · ") + (isNum(b.liqDist) ? "liq " + (b.liqDist * 100).toFixed(0) + "%" : "liq —"), x, y + R + 13);
         b._x = x; b._y = y; b._R = R;

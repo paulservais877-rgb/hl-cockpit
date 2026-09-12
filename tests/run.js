@@ -147,6 +147,17 @@ t("attribution present", Array.isArray(alpha.attribution) && alpha.attribution.l
 const dz = AOS.alpha.dietz([[0, 1000], [10, 1200]], [{ t: 5, amt: 100 }], 0, 10);
 t("dietz with deposit", near(dz.ret, (1200 - 1000 - 100) / (1000 + 50), 1e-9), String(dz.ret));
 t("dietz ledger wrapper (perps kind ignores staking)", near(AOS.alpha.dietzLedger([[0, 1000], [10, 1100]], [{ t: 5, flowPerps: 0, flowTotal: -50 }], 0, 10, "perps").ret, 0.1, 1e-9));
+// courbe d'equity rebasée : flux neutralisés, BTC rebasé sur la même fenêtre, HWM et repli
+{
+  const D = 86400e3, t0 = 1700000000000;
+  const h = { portfolio: { perpMonth: { accountValue: [[t0, 1000], [t0 + D, 1100], [t0 + 2 * D, 1600], [t0 + 3 * D, 1400]] } }, ledger: [{ t: t0 + 1.5 * D, flowPerps: 500, flowTotal: 500 }], candles: { BTC: { "1d": [{ t: t0 - 3600e3, c: 100 }, { t: t0 + D, c: 110 }, { t: t0 + 2 * D, c: 120 }, { t: t0 + 3 * D, c: 90 }] } } };
+  const c = AOS.alpha.equityCurve(h, "perpMonth", "perps");
+  t("equity curve ok", c.ok === true && c.points.length === 4, c.reason);
+  t("equity curve neutralises the deposit", near(c.points[2].you, 0.1, 1e-9) && near(c.points[3].you, -0.1, 1e-9), JSON.stringify(c.points.map((p) => p.you)));
+  t("equity curve HWM and drawdown", near(c.hwm, 0.1, 1e-9) && near(c.dd, 900 / 1100 - 1, 1e-9), `${c.hwm} ${c.dd}`);
+  t("equity curve BTC rebased on same window", near(c.points[3].btc, -0.1, 1e-9) && c.btcGapHours === 1, `${c.points[3].btc} gap ${c.btcGapHours}`);
+  t("equity curve refuses a series starting at 0", AOS.alpha.equityCurve({ portfolio: { perpMonth: { accountValue: [[t0, 0], [t0 + D, 50]] } } }).ok === false);
+}
 
 console.log("== agents & pipeline ==");
 const analysis = AOS.pipeline.run(snap, history, AOS.store.settings, null, { persist: true });

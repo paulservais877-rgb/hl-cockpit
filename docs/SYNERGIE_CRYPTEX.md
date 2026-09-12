@@ -48,3 +48,21 @@ eugene_proxy.py (optionnel) ┘    · Sentinelle avec doctrine §8.9 + hystéré
 ```
 
 Cryptex ne survit pas comme interface : il survit comme **doctrine, scène et fournisseur de sources**. Alpha OS ne survit pas sans ses garde-fous : il les adopte.
+
+## 5. État d'implémentation (synergie **sans la doctrine**, à la demande de Paul)
+
+Arbitrage retenu : la doctrine §8.9 (bandes 2,5×/3,0×, hystérésis, « un niveau se lit, il ne se commande pas ») **n'est pas portée**. Les seuils de la Sentinelle et les cartes de décision d'Alpha OS restent tels quels. Objectivement, c'est un choix de confort de lecture, pas de sécurité : la Sentinelle reste le seul garde-fou.
+
+| Point du plan | État | Où |
+|---|---|---|
+| 2. Scène « Marée » | **fait** — mer WebGL (même shader fbm/fresnel/traînée de lune), lune, auras, étoiles (155 au lieu de 510 : coût de recalcul de style), étoiles filantes, nuages, pluie, éclairs fractals + éclair d'eau en tempête, baleine par nuit calme. Pilotée par `body[data-state]` que seul `app.js` écrit à partir de `analysis.risk.level` (NORMAL → nuit calme, VIGILANCE/TENDU → crépuscule, DANGER/CRITIQUE → tempête). Sans images (les webp de Cryptex n'existent pas ici) ; pause quand l'onglet est caché ; mouvement réduit respecté ; 30 images/s. | `src/ui/maree.js`, `assets/css/app.css` |
+| 3. Enveloppe par source | **fait** — `history.loadAll` renvoie `sources[groupe] = {ok, ts, ttl, n, errors}` avec la vraie date d'obtention (une donnée servie du cache garde sa date) ; bande de fraîcheur sous la barre (compte, websocket, bougies, funding, carnet, fills, funding payé, portfolio, ledger, spot) en vert / orange (périmé > 1,5 × TTL) / rouge. | `src/data/history.js`, `src/app.js` |
+| 4. Courbe d'equity | **fait** — `AOS.alpha.equityCurve` : valeur perps rebasée en %, dépôts/retraits neutralisés (ledger), BTC rebasé sur la même fenêtre, plus-haut et repli, écart d'alignement BTC déclaré. Testé. | `src/engine/alpha.js`, `src/ui/views-intel.js` |
+| 5. Simulateur à deux entrées | **fait** — mode « marge × levier » (quantité déduite affichée) à côté du mode « quantité », même moteur ; chip « position couverte » quand la marge libre couvre le notional et qu'aucune liquidation n'est atteignable par cet actif seul. | `src/ui/sim.js` |
+| 6. Palette Velvet | **fait** — couleur canonique par actif (BTC, ETH, SOL, HYPE, TAO, ADA, WLD + 40 autres, repli déterministe) : corps de la carte orbitale (le sens passe dans l'anneau), pastilles sur positions, décisions, gravité. | `src/ui/palette.js` |
+| Design premium | **fait** — cartes en verre (flou 18 px) au-dessus de la scène, titres de section en Instrument Serif, barre du haut flottante, ambiance nommée dans la barre (« Nuit calme », « Crépuscule », « Tempête »). | `assets/css/app.css` |
+| 1. Doctrine + hystérésis | **exclu** (demande explicite) | — |
+| 7. Proxy local comme fournisseur | **non fait** (côté serveur, hors page statique) | — |
+| 8. Grille de liquidations 24 × 12 | **non fait** (dépend du proxy) | — |
+
+Coût à connaître : le flou des cartes au-dessus d'une mer animée se paie en GPU sur mobile. Mesures prises : mer à 30 images/s, résolution 0,9× sous 700 px, arrêt complet onglet caché, scène figée en mouvement réduit. Si un appareil chauffe, l'option suivante est de couper le flou (`backdrop-filter`) plutôt que la mer.

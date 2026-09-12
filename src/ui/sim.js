@@ -6,8 +6,18 @@
   const T = AOS.i18n, D = AOS.dom;
   const { html, raw, set, sum, $, tag, lvlTag, more, list, esc } = D;
 
-  const sim = { coin: "BTC", side: "LONG", qty: NaN, entry: NaN, inv: { mode: "ACCEPT", value: NaN }, tgt: { mode: "ACCEPT", value: NaN } };
+  // deux entrées, un seul moteur : « quantité » (Alpha OS) ou « marge × levier » (Cryptex). La quantité effective est toujours affichée.
+  const sim = { mode: "QTY", coin: "BTC", side: "LONG", qty: NaN, margin: NaN, lev: NaN, entry: NaN, inv: { mode: "ACCEPT", value: NaN }, tgt: { mode: "ACCEPT", value: NaN } };
   let analysis = null;
+
+  function markFor(coin) { const a = analysis?.snapshot?.meta?.assets?.[coin] || {}; return isNum(sim.entry) ? sim.entry : isNum(a.markPx) ? a.markPx : num(analysis?.snapshot?.mids?.[coin]); }
+  function defaultLev(coin) { const held = analysis?.snapshot?.positions?.find((p) => p.coin === coin); const mx = analysis?.snapshot?.meta?.assets?.[coin]?.maxLeverage || 5; return Math.min(isNum(held?.leverage) && held.leverage > 0 ? held.leverage : 5, mx); }
+  /** quantité effective selon le mode ; en mode marge, qty = marge × levier / prix */
+  function effectiveQty() {
+    if (sim.mode === "QTY") return sim.qty;
+    const mark = markFor(sim.coin), lev = isNum(sim.lev) ? sim.lev : defaultLev(sim.coin);
+    return isNum(sim.margin) && sim.margin > 0 && isNum(mark) && mark > 0 ? (sim.margin * lev) / mark : NaN;
+  }
 
   function coinsList() {
     const a = analysis?.snapshot?.meta?.assets || {};
@@ -21,19 +31,32 @@
   function renderForm() {
     const coins = coinsList();
     if (!coins.includes(sim.coin)) sim.coin = coins[0] || "BTC";
+    const maxLev = analysis?.snapshot?.meta?.assets?.[sim.coin]?.maxLeverage || 50;
+    const lev = isNum(sim.lev) ? sim.lev : defaultLev(sim.coin);
+    const levOptions = [1, 2, 3, 5, 8, 10, 15, 20, 25, 30, 40, 50].filter((x) => x <= maxLev); if (!levOptions.includes(lev)) levOptions.push(lev); levOptions.sort((a, b) => a - b);
+    const q = effectiveQty(), mark = markFor(sim.coin);
     set($("#sim-form"), html`
+      <div class="seg mode" style="margin-bottom:10px"><button id="sim-m-qty" aria-pressed="${sim.mode === "QTY"}">QUANTITÉ</button><button id="sim-m-margin" aria-pressed="${sim.mode === "MARGIN"}">MARGE × LEVIER</button></div>
       <div class="form c4">
         <div class="field"><label>Actif</label><select id="sim-coin">${raw(coins.map((c) => `<option ${c === sim.coin ? "selected" : ""}>${esc(c)}</option>`).join(""))}</select></div>
         <div class="field"><label>Sens</label><div class="seg"><button class="l" id="sim-long" aria-pressed="${sim.side === "LONG"}">LONG</button><button class="s" id="sim-short" aria-pressed="${sim.side === "SHORT"}">SHORT</button></div></div>
-        <div class="field"><label>Quantité (${sim.coin})</label><input id="sim-qty" inputmode="decimal" placeholder="ex. 0.25" value="${isNum(sim.qty) ? sim.qty : ""}"/></div>
+        ${sim.mode === "QTY"
+          ? html`<div class="field"><label>Quantité (${sim.coin})</label><input id="sim-qty" inputmode="decimal" placeholder="ex. 0.25" value="${isNum(sim.qty) ? sim.qty : ""}"/></div>`
+          : html`<div class="field"><label>Marge engagée ($)</label><input id="sim-margin" inputmode="decimal" placeholder="ex. 500" value="${isNum(sim.margin) ? sim.margin : ""}"/></div><div class="field"><label>Levier (max ${maxLev}×)</label><select id="sim-lev">${raw(levOptions.map((x) => `<option value="${x}" ${x === lev ? "selected" : ""}>${x}×</option>`).join(""))}</select></div>`}
         <div class="field"><label>Entrée (facultatif)</label><input id="sim-entry" inputmode="decimal" placeholder="prix du marché" value="${isNum(sim.entry) ? sim.entry : ""}"/></div>
+        ${sim.mode === "MARGIN" ? html`<div class="field"><label>Quantité déduite</label><div class="calc">${isNum(q) ? `${fmt.qty(q)} ${sim.coin} · notional ${fmt.usd(q * mark)}` : "—"}</div></div>` : ""}
       </div>`);
-    $("#sim-coin").addEventListener("change", (e) => { sim.coin = e.target.value; sim.inv = { mode: "ACCEPT", value: NaN }; sim.tgt = { mode: "ACCEPT", value: NaN }; renderForm(); renderResult(); });
+    $("#sim-m-qty").addEventListener("click", () => { if (sim.mode !== "QTY") { sim.mode = "QTY"; sim.qty = isNum(sim.qty) ? sim.qty : Number((effectiveQty() || NaN).toPrecision(4)); renderForm(); renderResult(); } });
+    $("#sim-m-margin").addEventListener("click", () => { if (sim.mode !== "MARGIN") { sim.mode = "MARGIN"; if (!isNum(sim.margin) && isNum(sim.qty) && isNum(mark)) { sim.lev = defaultLev(sim.coin); sim.margin = Math.round((sim.qty * mark) / sim.lev); } renderForm(); renderResult(); } });
+    $("#sim-coin").addEventListener("change", (e) => { sim.coin = e.target.value; sim.lev = NaN; sim.inv = { mode: "ACCEPT", value: NaN }; sim.tgt = { mode: "ACCEPT", value: NaN }; renderForm(); renderResult(); });
     $("#sim-long").addEventListener("click", () => { sim.side = "LONG"; sim.inv.mode = "ACCEPT"; sim.tgt.mode = "ACCEPT"; renderForm(); renderResult(); });
     $("#sim-short").addEventListener("click", () => { sim.side = "SHORT"; sim.inv.mode = "ACCEPT"; sim.tgt.mode = "ACCEPT"; renderForm(); renderResult(); });
-    $("#sim-qty").addEventListener("input", (e) => { sim.qty = num(e.target.value); renderResult(); });
-    $("#sim-entry").addEventListener("input", (e) => { sim.entry = num(e.target.value); renderResult(); });
+    $("#sim-qty")?.addEventListener("input", (e) => { sim.qty = num(e.target.value); renderResult(); });
+    $("#sim-margin")?.addEventListener("input", (e) => { sim.margin = num(e.target.value); renderCalc(); renderResult(); });
+    $("#sim-lev")?.addEventListener("change", (e) => { sim.lev = num(e.target.value); renderCalc(); renderResult(); });
+    $("#sim-entry").addEventListener("input", (e) => { sim.entry = num(e.target.value); renderCalc(); renderResult(); });
   }
+  function renderCalc() { const el = $("#sim-form .calc"); if (!el) return; const q = effectiveQty(), mark = markFor(sim.coin); el.textContent = isNum(q) ? `${fmt.qty(q)} ${sim.coin} · notional ${fmt.usd(q * mark)}` : "—"; }
 
   function suggestRow(id, label, sug, why, state) {
     const val = state.mode === "EDIT" && isNum(state.value) ? state.value : state.mode === "IGNORE" ? NaN : sug;
@@ -42,9 +65,10 @@
 
   function renderResult() {
     const out = $("#sim-result");
-    if (!analysis || !isNum(sim.qty) || sim.qty <= 0) { set(out, html`<div class="hint">Choisis un actif, un sens et une quantité. Le moteur déduit le reste : frais, funding, marge, liquidation, effet sur le portefeuille.</div>`); sum("simulator", ""); return; }
+    const qty = effectiveQty();
+    if (!analysis || !isNum(qty) || qty <= 0) { set(out, html`<div class="hint">${sim.mode === "QTY" ? "Choisis un actif, un sens et une quantité." : "Choisis un actif, un sens, une marge et un levier."} Le moteur déduit le reste : frais, funding, marge, liquidation, effet sur le portefeuille.</div>`); sum("simulator", ""); return; }
     const a = analysis;
-    const trade = { coin: sim.coin, side: sim.side, qty: sim.qty, entry: isNum(sim.entry) ? sim.entry : undefined };
+    const trade = { coin: sim.coin, side: sim.side, qty, entry: isNum(sim.entry) ? sim.entry : undefined, leverage: sim.mode === "MARGIN" ? (isNum(sim.lev) ? sim.lev : defaultLev(sim.coin)) : undefined };
     const asset = a.snapshot.meta.assets[sim.coin] || {};
     const mark = isNum(trade.entry) ? trade.entry : asset.markPx ?? num(a.snapshot.mids[sim.coin]);
     if (!isNum(mark)) { set(out, html`<div class="banner bad">Prix inconnu pour ${sim.coin}.</div>`); return; }
@@ -56,7 +80,10 @@
     const imp = AOS.simulate.impact(a.snapshot, a.features, { portfolio: a.portfolio, risk: a.risk }, { ...trade, pWin: opp?.pWin, horizonDays: opp?.horizonDays }, levels, AOS.store.settings);
     if (!imp) { set(out, html`<div class="banner bad">Simulation impossible.</div>`); return; }
     const d = imp.deltas;
+    // « position couverte » (Cryptex) : la marge libre actuelle couvre tout le notional → aucune liquidation possible par cet actif seul
+    const covered = isNum(a.snapshot.account.availableMargin) && imp.notional <= a.snapshot.account.availableMargin && (!isNum(imp.newLiqDist) || imp.newLiqDist >= 1);
     set(out, html`
+      ${covered ? html`<div class="suggest" style="margin-bottom:8px;border-style:solid;border-color:rgba(69,211,154,.4)"><span class="tag ok">POSITION COUVERTE</span><span class="hint">La marge libre (${fmt.usd(a.snapshot.account.availableMargin)}) couvre tout le notional (${fmt.usd(imp.notional)}) : cet actif seul ne peut pas liquider le compte.</span></div>` : ""}
       ${invRow.html}<div style="height:8px"></div>${tgtRow.html}
       <div class="mini" style="margin-top:12px">
         <div class="m"><div class="k">Perte si invalidé</div><div class="v neg" data-private>${isNum(imp.lossIfInvalidated) ? fmt.usdSigned(imp.lossIfInvalidated) : "—"}</div><div class="hint">${isNum(imp.lossIfInvalidated) && isNum(a.snapshot.account.equity) ? fmt.pct(imp.lossIfInvalidated / a.snapshot.account.equity, 2) + " de l'equity" : ""}</div></div>
@@ -75,7 +102,7 @@
       el.querySelectorAll("button[data-m]").forEach((b) => b.addEventListener("click", () => { st.mode = b.dataset.m; if (st.mode === "EDIT" && !isNum(st.value)) st.value = id === "#sim-inv" ? sug.invalidation : sug.target; renderResult(); }));
       const inp = el.querySelector("[data-edit]"); if (inp) { inp.addEventListener("change", () => { st.value = num(inp.value); renderResult(); }); inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { st.value = num(inp.value); renderResult(); } }); }
     }
-    sum("simulator", `${sim.side} ${sim.qty} ${sim.coin} → ${T.level(imp.newLevel)}`);
+    sum("simulator", `${sim.side} ${fmt.qty(qty)} ${sim.coin}${sim.mode === "MARGIN" ? ` (${fmt.usd(sim.margin)} × ${trade.leverage}×)` : ""} → ${T.level(imp.newLevel)}`);
   }
 
   // ---- « Et si… » ---------------------------------------------------------------------------------
@@ -106,7 +133,7 @@
   }
 
   function setAnalysis(a) { analysis = a; renderForm(); renderResult(); renderScenario(); }
-  function prefill(card) { sim.coin = card.coin; sim.side = card.side; sim.qty = card.sizing ? Number(card.sizing.qty.toPrecision(4)) : sim.qty; sim.entry = NaN; sim.inv = { mode: "EDIT", value: card.invalidation }; sim.tgt = { mode: "EDIT", value: card.target }; renderForm(); renderResult(); const d = document.getElementById("simulator"); if (d) { d.open = true; d.scrollIntoView({ behavior: "smooth" }); } }
+  function prefill(card) { sim.mode = "QTY"; sim.coin = card.coin; sim.side = card.side; sim.qty = card.sizing ? Number(card.sizing.qty.toPrecision(4)) : sim.qty; sim.entry = NaN; sim.inv = { mode: "EDIT", value: card.invalidation }; sim.tgt = { mode: "EDIT", value: card.target }; renderForm(); renderResult(); const d = document.getElementById("simulator"); if (d) { d.open = true; d.scrollIntoView({ behavior: "smooth" }); } }
 
   AOS.simUI = { setAnalysis, prefill, state: sim };
 })(typeof window !== "undefined" ? window : globalThis);
